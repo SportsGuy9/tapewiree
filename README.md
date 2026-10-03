@@ -112,6 +112,15 @@ An instrument is measured only while its market trades, and only from prices tha
   - A live record of predictions stamped on each headline as it arrived, scored after its reaction was measured.
   - Champion/challenger: a retrain that tests clearly worse doesn't replace the model in use.
 - **Use:** once the model beats the rule score on unseen data, it adjusts every headline's importance by up to ±2.5 points. That changes alerts, story ranking, which articles get read in full, news-bus feed priority and the catalyst board. Each headline shows the model's odds, lean, the features that drove them and the markets it is most likely to move. The catalyst board adds those markets to each story's watch list, with their reaction since the headline. The model also suggests the alert threshold with the best precision/recall trade-off.
+- **Continuation vs fade:** using each market's 4-hour reaction, the model learns whether a meaningful first-hour move keeps going or reverses. It shows this only once it beats always guessing the usual outcome.
+- **Live cross-asset record:** the markets the model picks for each headline are stamped as the headline arrives, then scored once their reactions are measured. If live picks stop beating each market's normal rate, the panel flags drift.
+
+### From learning to predictions, trade ideas and context
+
+- **News pressure** (News trades tab): which markets the last 3 hours of stories should move and which way. It adds up every story, weights each by the model's odds and lift, and fades older stories. Each row is set against how far that market has already moved: not priced yet, reacting, extended, or moving against the news.
+- **Model trade candidates:** strong, directional pressure on a tradable instrument that isn't priced yet, or a first-hour move the model expects to extend. Each becomes a mechanical ticket: market entry, stop at 1.6× the instrument's normal hour, target 2R. **Log** turns it into an idea. Under Settings you can let the collector log the strongest candidates itself (at most 2 every 20 minutes). These ideas are marked and graded like any other under the setup "news model", so the desk's record shows whether the model's calls make money.
+- **Move attribution:** for each big market move, the headline in the prior 75 minutes the model most expects to have caused it, or a note that no headline explains it.
+- **Context everywhere:** pressure, candidates, attribution and the model read on each catalyst (which markets should move, and whether they have) all feed the PM, the red team, the huddle's news analysts, the FX desk and the briefing. Ask the desk gets a `get_news_pressure` tool. Past analogs now show each analog's biggest cross-asset movers, not just NQ.
 - It retrains every 3 hours (or press **Retrain now**). Ask the desk, briefings and the idea generator read its findings. It needs about 80 measured headlines before it starts.
 
 ## Files
