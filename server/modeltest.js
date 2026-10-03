@@ -39,3 +39,39 @@ console.log("modeltest ok");
 const withLive = recs.map((r, i) => (i % 2 ? { ...r, pb: M.predict(res, r).pBig, pu: M.predict(res, r).pUp } : r));
 const res2 = M.train(withLive); assert.ok(res2.live.n > 500 && res2.live.auc > 0.8, "live record scored");
 console.log("live", JSON.stringify(res2.live));
+
+// ---- cross-asset: each instrument has its own triggers, which the pair model must learn
+seed = 7; const xrecs = []; const xw = ["opec", "yen", "boj", "bitcoin", "etf", "gold", "fed", "earnings", "merger", "analyst", "ceo", "chip", "copper", "china", "jobs", "retail"];
+for (let k = 0; k < 1400; k++) {
+  const ws = [0, 1, 2].map(() => xw[Math.floor(rnd() * xw.length)]); const has = (w) => ws.includes(w);
+  const n = (sd) => (rnd() - 0.5) * 2 * sd;
+  const mv = { NQ: n(0.15), ES: n(0.1), US10Y: n(1.5), DXY: n(0.06), WTI: n(0.3), GOLD: n(0.15), BTC: n(0.5), EURUSD: n(0.05), USDJPY: n(0.06), COPPER: n(0.25) };
+  if (has("opec")) mv.WTI += 1.2 + rnd() * 0.6;                       // OPEC -> oil up, nothing else
+  if (has("yen") || has("boj")) mv.USDJPY -= 0.3 + rnd() * 0.2;         // BOJ/yen -> USDJPY down
+  if (has("bitcoin") && has("etf")) mv.BTC += 2 + rnd();               // bitcoin ETF -> BTC up
+  if (has("fed")) { mv.US10Y += 5 + rnd() * 3; mv.NQ -= 0.4; mv.DXY += 0.15; } // fed -> yields up, NQ down, dollar up
+  if (has("copper") && has("china")) mv.COPPER += 1 + rnd() * 0.5;
+  const tk = has("chip") ? ["NVDA"] : []; if (tk.length) mv.NVDA = n(0.5) + (has("earnings") ? 2.5 : 0);
+  xrecs.push({ t: t0 + k * 3600e3 * 3, title: ws.join(" ") + " report", cls: "general", outlet: "reuters", src: "nb", tk, ents: [], sent: 0, ri: 5 + n(1), mv, m1: mv.NQ, y10: mv.US10Y });
+}
+const xr = M.train(xrecs);
+console.log("cross", JSON.stringify({ any: [xr.metrics.anyAuc, xr.metrics.anyBaseAuc], xa: [xr.metrics.xaAuc, xr.metrics.xaBaseAuc], xd: xr.metrics.xdAcc, cls: xr.metrics.xClass, imp: xr.impHead, ok: xr.ok }));
+assert.equal(xr.impHead, "any", "importance follows the any-market head");
+assert.ok(xr.metrics.anyAuc > 0.75 && xr.metrics.anyAuc > xr.metrics.anyBaseAuc + 0.15, "any-market head finds the triggers");
+assert.ok(xr.metrics.xaAuc > 0.8, "pair model learns which instrument moves");
+assert.ok(xr.ok.xa && xr.ok.xd, "cross heads pass their gates");
+for (const c of ["commodity", "fx", "crypto", "rates"]) assert.ok(xr.metrics.xClass[c]?.auc > (c === "crypto" ? 0.65 : 0.7), "learns " + c);
+const top = (title, tk = []) => M.predict(xr, { t: Date.now(), title, cls: "general", outlet: "reuters", tk, sent: 0, ri: 5 }, { assets: true, top: 3 }).assets;
+const opec = top("opec cuts output report"), boj = top("boj yen intervention report"), btc = top("bitcoin etf approval report"), fed = top("fed hike report"), nv = top("chip earnings report", ["NVDA"]);
+console.log("opec", JSON.stringify(opec[0]), "boj", JSON.stringify(boj[0]), "btc", JSON.stringify(btc[0]), "fed", JSON.stringify(fed.slice(0, 3).map((a) => a.k)), "nvda", JSON.stringify(nv[0]));
+assert.equal(opec[0].k, "WTI"); assert.ok(opec[0].up > 0.6, "oil up on OPEC");
+assert.equal(boj[0].k, "USDJPY"); assert.ok(boj[0].up < 0.4, "yen strengthens on BOJ");
+assert.equal(btc[0].k, "BTC"); assert.ok(btc[0].up > 0.6);
+assert.ok(fed.some((a) => a.k === "US10Y"), "fed moves yields");
+assert.equal(nv[0].k, "NVDA", "the named stock tops a chip earnings headline");
+assert.ok(xr.xtop.asset.WTI?.some((x) => x[0] === "opec"), "learned trigger list names opec for oil");
+assert.ok(JSON.stringify(xr).length < 6e6, "cross-asset model fits in one document");
+console.log("size", Math.round(JSON.stringify(xr).length / 1024), "KB");
+// old-style records (NQ + 10Y + stock only) still train
+const old = M.train(recs.slice(0, 600)); assert.equal(old.status, "trained");
+console.log("cross-asset ok");

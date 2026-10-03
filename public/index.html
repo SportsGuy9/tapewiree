@@ -1405,12 +1405,13 @@ async function pushSnapshot(patchQ, sec, at, stk) {
   const q = { ...(prev?.q || {}) }; for (const k in patchQ) q[k] = patchQ[k];
   const snap = { t: at, q }; if (sec || prev?.sec) snap.sec = { ...(prev?.sec || {}), ...(sec || {}) };
   if (stk || prev?.stk) snap.stk = { ...(prev?.stk || {}), ...(stk || {}) };
+  snap.u = [...Object.keys(patchQ || {}), ...Object.keys(sec || {}).map((k) => "x:" + k), ...Object.keys(stk || {}).map((k) => "s:" + k)];
   const day = dayKey(at);
   await write("market/" + day, async () => {
     const d = await S.db.doc("market/" + day).get();
     const cur = d.exists ? structuredClone(d.data()) : { day, snaps: [] };
     const last = cur.snaps[cur.snaps.length - 1];
-    if (last && at - last.t < 10 * MIN) cur.snaps[cur.snaps.length - 1] = snap; else cur.snaps.push(snap);
+    if (last && at - last.t < 10 * MIN) cur.snaps[cur.snaps.length - 1] = { ...snap, u: [...new Set([...(last.u || []), ...snap.u])] }; else cur.snaps.push(snap);
     if (JSON.stringify(cur).length > 230000) cur.snaps = cur.snaps.filter((_, i) => i % 2 === 0 || i === cur.snaps.length - 1);
     cur.updatedAt = at;
     await S.db.doc("market/" + day).set(cur);
@@ -1824,7 +1825,7 @@ const RUN = {
     for (const [k, y] of YQ_VOL) if (b?.[y]) q[k] = [b[y].p, b[y].d1, b[y].d5];
     for (const x of SECT) if (a?.[x]) sec[x] = [a[x].d1, a[x].d5];
     for (const x of syms) if (b?.[x]) stk[x] = [b[x].p, b[x].d1, b[x].d5];
-    await pushSnapshot(q, Object.keys(sec).length ? sec : null, Date.now(), Object.keys(stk).length ? { ...(lastSnap()?.stk || {}), ...stk } : null);
+    await pushSnapshot(q, Object.keys(sec).length ? sec : null, Date.now(), Object.keys(stk).length ? stk : null);
     await vixCurveCheck();
     setSrc("ys", { note: `${Object.keys(sec).length} sectors, ${Object.keys(stk).length} stocks, vol gauges` });
   },
@@ -2535,6 +2536,17 @@ function modelPredict(e) {
   if (key) { if (_pred.size > 30000) _pred.clear(); _pred.set(key, p); }
   return p;
 }
+const _predA = new Map();
+const ASSET_LABEL = { NQ: "Nasdaq fut", ES: "S&P fut", RTY: "Russell fut", YM: "Dow fut", VIX: "VIX", US10Y: "10Y yield", US2Y: "2Y yield", US5Y: "5Y yield", DXY: "Dollar", WTI: "Crude", GOLD: "Gold", SILVER: "Silver", COPPER: "Copper", NATGAS: "Nat gas", BTC: "Bitcoin", ETH: "Ether", SOL: "Solana", TLT: "Long bonds", HYG: "Junk bonds" };
+const assetName = (k) => ASSET_LABEL[k] || k;
+function modelAssets(e, n = 8) {
+  const M2 = S.newsModel2; if (!M2?.heads?.xa || !window.TWNewsModel || !e?.title) return null;
+  if (_predT !== M2.t) { _pred.clear(); _predA.clear(); _predT = M2.t; }
+  const key = (e.id || e.title) + "|" + n; if (_predA.has(key)) return _predA.get(key);
+  let r = null; try { r = TWNewsModel.predict(M2, modelRow(e), { assets: true, top: n })?.assets || null; } catch (err) { console.warn("model assets", err); }
+  if (_predA.size > 3000) _predA.clear(); _predA.set(key, r); return r;
+}
+const assetsLine = (as, n = 5) => (as || []).slice(0, n).map((a) => `${a.k} ${Math.round(a.p * 100)}%${a.up != null && Math.abs(a.up - 0.5) >= 0.08 ? ` ${a.up > 0.5 ? "↑" : "↓"}` : ""}`).join(", ");
 /* training runs in a Web Worker so the page never freezes; falls back to the main thread where workers aren't available */
 function trainOffThread(recs) {
   if (typeof Worker === "undefined") return Promise.resolve(TWNewsModel.train(recs));
@@ -2551,17 +2563,17 @@ async function trainNewsModel2(force) {
   const now = Date.now(); if (!force && now - (S.newsModel2?.t || 0) < 3 * HOUR) return null;
   const evById = new Map(S.events.map((e) => [e.id, e])); const recs = [];
   for (const [id, r] of S.reactions) {
-    const h1 = r.x?.h1; const m1 = h1 ? h1.NQ ?? h1.QQQ ?? h1.NDX : null; if (m1 == null) continue;
+    const h1 = r.x?.h1; if (!h1) continue; const m1 = h1.NQ ?? h1.QQQ ?? h1.NDX ?? null; if (m1 == null && !h1.A) continue;
     const e = evById.get(id); const title = r.h || e?.title; if (!title) continue; const tk = r.tk || e?.tk || [];
-    recs.push({ t: r.t, title, cls: r.c, outlet: outletKey(r.o || e?.outlet || r.src || ""), src: r.src, fd: r.fd, tk, ents: entitiesOf({ title, sum: "", tk }), sent: r.s, ri: r.ri ?? e?.ri ?? r.i, so: r.so ?? 1, nv: r.nv ?? e?.nv ?? 0, cal: r.cal ?? e?.cal ?? null, rg: r.rg ?? e?.rg ?? null, op: r.op ?? (e?.op ? 1 : 0), w: r.w ?? e?.w ?? 0, m1, y10: h1.Y10 ?? null, ab: h1.S ? Object.values(h1.S)[0] : null, pb: r.pb ?? e?.pb ?? null, pu: r.pu ?? e?.pu ?? null });
+    recs.push({ t: r.t, title, cls: r.c, outlet: outletKey(r.o || e?.outlet || r.src || ""), src: r.src, fd: r.fd, tk, ents: entitiesOf({ title, sum: "", tk }), sent: r.s, ri: r.ri ?? e?.ri ?? r.i, so: r.so ?? 1, nv: r.nv ?? e?.nv ?? 0, cal: r.cal ?? e?.cal ?? null, rg: r.rg ?? e?.rg ?? null, op: r.op ?? (e?.op ? 1 : 0), w: r.w ?? e?.w ?? 0, m1, y10: h1.Y10 ?? null, ab: h1.S ? Object.values(h1.S)[0] : null, mv: h1.A || null, mvS: h1.S || null, pb: r.pb ?? e?.pb ?? null, pu: r.pu ?? e?.pu ?? null });
   }
   const res = await trainOffThread(recs); const prev = S.newsModel2?.heads ? S.newsModel2 : null;
   let doc;
   if (res.status !== "trained") doc = { ...(prev || {}), status: prev ? prev.status : "warming", t: now, warming: { n: res.n, need: res.need }, history: prev?.history || [] };
   else {
     // champion/challenger: a retrain that validates clearly worse than the model in use doesn't replace it, unless the data grew a lot
-    const worse = prev?.active && res.metrics.auc != null && prev.metrics?.auc != null && res.metrics.auc < prev.metrics.auc - 0.03 && res.n < prev.n * 1.25;
-    const entry = { t: res.t, n: res.n, auc: res.metrics.auc, baseAuc: res.metrics.baseAuc, dirAcc: res.metrics.dirAcc, sp: res.metrics.spearman, active: res.active, kept: !worse };
+    const sc = (m) => (m?.anyAuc ?? m?.auc); const worse = prev?.active && sc(res.metrics) != null && sc(prev.metrics) != null && sc(res.metrics) < sc(prev.metrics) - 0.03 && res.n < prev.n * 1.25;
+    const entry = { t: res.t, n: res.n, anyAuc: res.metrics.anyAuc ?? null, xaAuc: res.metrics.xaAuc ?? null, auc: res.metrics.auc, baseAuc: res.metrics.baseAuc, dirAcc: res.metrics.dirAcc, sp: res.metrics.spearman, active: res.active, kept: !worse };
     doc = worse ? { ...prev, t: now, history: [...(prev.history || []), entry].slice(-120), lastRejected: entry } : { ...res, history: [...(prev?.history || []), entry].slice(-120) };
   }
   S.newsModel2 = doc; _pred.clear();
@@ -2579,12 +2591,23 @@ function featLabel(n) {
 function modelHTML(e) {
   if (e.src === "mkt") return ""; const p = modelPredict(e); if (!p) return ""; const M2 = S.newsModel2;
   const why = (p.why || []).slice(0, 5).map(([n, c]) => `<span class="${c > 0 ? "up" : "down"}">${esc(featLabel(n))} ${c > 0 ? "+" : ""}${c}</span>`).join(" · ");
-  return `<div class="analysis" style="border-left-color:var(--s1)"><h4>News model${M2.active ? ` · adds ${p.adj > 0 ? "+" : ""}${p.adj} to importance` : " · still learning, not applied"}</h4><p>${Math.round(p.pBig * 100)}% chance this moves NQ ≥ 1.5× a normal hour${p.mult != null && M2.ok?.mag ? ` · expected ${p.mult}× a normal hour` : ""}${p.ok?.dir && p.pUp != null ? ` · lean <b class="${p.pUp >= 0.5 ? "up" : "down"}">${p.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(p.pUp, 1 - p.pUp) * 100)}%</b>` : ""}${p.ok?.rates && p.pRates != null ? ` · ${Math.round(p.pRates * 100)}% chance of a big 10-year move` : ""}${p.ok?.stock && p.pStock != null ? ` · ${Math.round(p.pStock * 100)}% chance the stock beats/lags the Nasdaq sharply` : ""}</p>${why ? `<p class="note" style="margin:0">Why: ${why}</p>` : ""}</div>`;
+  return `<div class="analysis" style="border-left-color:var(--s1)"><h4>News model${M2.active ? ` · adds ${p.adj > 0 ? "+" : ""}${p.adj} to importance` : " · still learning, not applied"}</h4><p>${p.pAny != null && M2.impHead === "any" ? `${Math.round(p.pAny * 100)}% chance of an outsized move in a major market · ` : ""}${Math.round(p.pBig * 100)}% chance this moves NQ ≥ 1.5× a normal hour${p.mult != null && M2.ok?.mag ? ` · expected ${p.mult}× a normal hour` : ""}${p.ok?.dir && p.pUp != null ? ` · lean <b class="${p.pUp >= 0.5 ? "up" : "down"}">${p.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(p.pUp, 1 - p.pUp) * 100)}%</b>` : ""}${p.ok?.rates && p.pRates != null ? ` · ${Math.round(p.pRates * 100)}% chance of a big 10-year move` : ""}${p.ok?.stock && p.pStock != null ? ` · ${Math.round(p.pStock * 100)}% chance the stock beats/lags the Nasdaq sharply` : ""}</p>${why ? `<p class="note" style="margin:0">Why: ${why}</p>` : ""}${assetsHTML(e)}</div>`;
+}
+function assetsHTML(e) {
+  const as = modelAssets(e, 8); const M2 = S.newsModel2; if (!as?.length) return "";
+  return `<p style="margin:6px 0 0"><span class="note">Markets most likely to move${M2.ok?.xa ? "" : " (cross-asset model still learning)"}:</span> ${as.map((a) => `<span class="tk" title="${esc(`${assetName(a.k)} (${a.cls}): ${Math.round(a.p * 100)}% chance of a move ≥1.5× its normal hour vs ${Math.round(a.base * 100)}% normally${a.up != null ? `; rises ${Math.round(a.up * 100)}% of the time when it moves` : ""}`)}">${esc(a.k)} ${Math.round(a.p * 100)}%${a.lift >= 1.3 ? ` <b>${a.lift}×</b>` : ""}${M2.ok?.xd && a.up != null && Math.abs(a.up - 0.5) >= 0.08 ? ` <span class="${a.up > 0.5 ? "up" : "down"}">${a.up > 0.5 ? "↑" : "↓"}</span>` : ""}</span>`).join(" ")}</p>`;
 }
 function model2Text() {
   const M = S.newsModel2; if (!M?.metrics) return M?.warming ? `Trained news model: warming up (${M.warming.n} of ${M.warming.need} measured headlines needed).` : "Trained news model: not trained yet.";
   const m = M.metrics; const fam = (h, f, dir) => (M.top?.[h]?.[f]?.[dir] || []).slice(0, 8).map((x) => x[0]).join(", ");
-  return `Trained news model (${new Date(M.t).toISOString().slice(0, 16)}Z, ${M.n} measured headlines, walk-forward validated${M.live?.auc != null ? `; live AUC ${M.live.auc} over ${M.live.n} headlines` : ""}; ${M.active ? "APPLIED to importance" : "not applied: it doesn't beat the rule score yet"}): AUC for "moves NQ ≥1.5× a normal hour" ${m.auc} vs rule score ${m.baseAuc}; top-fifth precision ${m.precTop} vs ${m.precTopBase}; direction accuracy ${m.dirAcc ?? "?"} vs base rate ${m.dirBase ?? "?"}${m.ratesAuc != null ? `; 10Y-move AUC ${m.ratesAuc}` : ""}${m.stockAuc != null ? `; stock-vs-Nasdaq AUC ${m.stockAuc}` : ""}. Words that predict big moves: ${fam("big", "w", "up") || "n/a"}; words that predict nothing happens: ${fam("big", "w", "down") || "n/a"}; outlets that move NQ: ${fam("big", "o", "up") || "n/a"}; outlets that don't: ${fam("big", "o", "down") || "n/a"}${M.ok?.dir ? `; bullish words: ${fam("dir", "w", "up")}; bearish words: ${fam("dir", "w", "down")}` : ""}.`;
+  return `Trained news model (${new Date(M.t).toISOString().slice(0, 16)}Z, ${M.n} measured headlines, walk-forward validated${M.live?.auc != null ? `; live AUC ${M.live.auc} over ${M.live.n} headlines` : ""}; ${M.active ? "APPLIED to importance" : "not applied: it doesn't beat the rule score yet"}): AUC for "moves NQ ≥1.5× a normal hour" ${m.auc} vs rule score ${m.baseAuc}; top-fifth precision ${m.precTop} vs ${m.precTopBase}; direction accuracy ${m.dirAcc ?? "?"} vs base rate ${m.dirBase ?? "?"}${m.ratesAuc != null ? `; 10Y-move AUC ${m.ratesAuc}` : ""}${m.stockAuc != null ? `; stock-vs-Nasdaq AUC ${m.stockAuc}` : ""}. Words that predict big moves: ${fam("big", "w", "up") || "n/a"}; words that predict nothing happens: ${fam("big", "w", "down") || "n/a"}; outlets that move NQ: ${fam("big", "o", "up") || "n/a"}; outlets that don't: ${fam("big", "o", "down") || "n/a"}${M.ok?.dir ? `; bullish words: ${fam("dir", "w", "up")}; bearish words: ${fam("dir", "w", "down")}` : ""}.${crossText()}`;
+}
+function crossText() {
+  const M = S.newsModel2; const m = M?.metrics; if (!m?.xaN) return "";
+  const cls = Object.entries(m.xClass || {}).map(([c, v]) => `${c} AUC ${v.auc ?? "?"} (n${v.n}${v.dirAcc != null ? `, direction ${Math.round(v.dirAcc * 100)}% vs ${Math.round((v.dirBase ?? 0.5) * 100)}%` : ""})`).join("; ");
+  const what = Object.entries(M.xtop?.asset || {}).slice(0, 14).map(([k, arr]) => `${k}: ${arr.slice(0, 5).map((x) => x[0].replace(/_/g, " ")).join(", ")}`).join(" | ");
+  const dir = Object.entries(M.xtop?.dir || {}).filter(([, v]) => v.up?.length || v.down?.length).slice(0, 10).map(([k, v]) => `${k} up on ${v.up.slice(0, 3).map((x) => x[0]).join("/") || "?"}, down on ${v.down.slice(0, 3).map((x) => x[0]).join("/") || "?"}`).join("; ");
+  return ` Cross-asset model (${m.xaN} headline×instrument pairs; ${M.impHead === "any" ? "importance follows the any-major-market head" : "importance follows the NQ head"}${m.anyAuc != null ? `, any-market AUC ${m.anyAuc} vs rules ${m.anyBaseAuc}` : ""}): overall AUC ${m.xaAuc ?? "?"} vs rules ${m.xaBaseAuc ?? "?"}${m.xdAcc != null ? `, direction ${Math.round(m.xdAcc * 100)}%` : ""}; by class: ${cls || "thin"}. What moves each market: ${what || "thin"}${dir ? `. Direction: ${dir}` : ""}.`;
 }
 function newsModelText() {
   const M = S.newsModel; if (!M?.n) return `${model2Text()} Category weights: not trained yet (needs measured Nasdaq reactions).`;
@@ -3510,8 +3533,9 @@ function instFor(s) {
   for (const e of s.events.slice(0, 6)) for (const t of e.tk || []) add(t === "NDX" ? "NQ" : t === "SPX" ? "ES" : t);
   const tags = new Set(); for (const e of s.events.slice(0, 6)) for (const c of fxTags(e)) tags.add(c);
   for (const c of tags) { if (c === "USD") { add("DXY"); add("EURUSD"); add("USDJPY"); continue; } const p = FX_PAIRS.find((x) => x === c + "USD") || FX_PAIRS.find((x) => x === "USD" + c); add(p); }
+  const as = modelAssets(s.lead || s.events[0], 10); if (as && S.newsModel2?.ok?.xa) for (const a of as) if (a.lift >= 1.4 && out.length < 5) add(a.k);
   for (const k of CAT_INST[s.cls] || []) add(k);
-  return out.slice(0, 6);
+  return out.slice(0, 7);
 }
 function reactionOf(sym, t0) {
   const p0 = priceAtTime(sym, t0), c = curPrice(sym); if (p0 == null || !c) return null; const T = String(sym).toUpperCase();
@@ -3546,13 +3570,13 @@ function catalystsRaw(hours = 6) {
     const inst = instFor(s); const react = Object.fromEntries(inst.map((k) => [k, reactionOf(k, first)]).filter(([, v]) => v));
     const keys = s.events.map((e) => S.articles.get(e.id)?.key).filter(Boolean).flat().slice(0, 4);
     const th = lead.th && (S.threads?.items || []).find((t) => t.id === lead.th);
-    out.push({ id: s.id, t: first, last: s.last, title: lead.title, lead, events: s.events.slice().sort((a, b) => a.t - b.t).slice(0, 8), outlets: s.outlets, n: s.events.length, cls: s.cls, score: s.score, inst, react, keys, analogs: pastAnalogs(lead), nov: lead.nv, thread: th ? { title: th.title, days: Object.keys(th.days || {}).length, st: th.st, rx: th.rx } : null, conf: S.runs?.tfsConf?.[s.id] || null, rel: lead.src === "cal" || !!lead.rel, model: modelPredict(lead) });
+    out.push({ id: s.id, t: first, last: s.last, title: lead.title, lead, events: s.events.slice().sort((a, b) => a.t - b.t).slice(0, 8), outlets: s.outlets, n: s.events.length, cls: s.cls, score: s.score, inst, react, keys, analogs: pastAnalogs(lead), nov: lead.nv, thread: th ? { title: th.title, days: Object.keys(th.days || {}).length, st: th.st, rx: th.rx } : null, conf: S.runs?.tfsConf?.[s.id] || null, rel: lead.src === "cal" || !!lead.rel, model: modelPredict(lead), assets: modelAssets(lead, 6) });
   }
   return out.sort((a, b) => b.last - a.last).slice(0, 14);
 }
 function catalystsText(hours = 6, filterFx = false) {
   const cs = catalysts(hours).filter((c) => !filterFx || c.inst.some((k) => FX_PAIRS.includes(k) || k === "DXY"));
-  return cs.map((c) => `- [${etHM(c.t)} ET, ${Math.round((Date.now() - c.t) / MIN)}m ago] ${c.title} (${c.outlets} outlet${c.outlets > 1 ? "s" : ""}, ${c.n} articles, ${c.cls}${c.nov < 0 ? ", REHASH of an older thread" : c.nov > 0 ? ", NEW" : ""}${c.thread ? `, thread day ${c.thread.days}` : ""}${c.model ? `, model: ${Math.round(c.model.pBig * 100)}% big-move odds${c.model.ok?.dir && c.model.pUp != null ? `, lean ${c.model.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(c.model.pUp, 1 - c.model.pUp) * 100)}%` : ""}` : ""}) → since the headline: ${Object.entries(c.react).map(([k, r]) => `${k} ${r.mv > 0 ? "+" : ""}${r.mv}${r.unit} (${r.u ?? "?"}× a normal day, ${r.st})`).join("; ") || "no reaction data"}${c.keys.length ? ` :: ${c.keys.slice(0, 2).join(" ")}`.slice(0, 380) : ""}${c.analogs.length ? ` || past analogs: ${c.analogs.slice(0, 3).map((a) => `${a.d} "${a.title.slice(0, 70)}" NQ 1h ${a.nq > 0 ? "+" : ""}${a.nq}%`).join("; ")}` : ""}`).join("\n") || "no fresh catalysts";
+  return cs.map((c) => `- [${etHM(c.t)} ET, ${Math.round((Date.now() - c.t) / MIN)}m ago] ${c.title} (${c.outlets} outlet${c.outlets > 1 ? "s" : ""}, ${c.n} articles, ${c.cls}${c.nov < 0 ? ", REHASH of an older thread" : c.nov > 0 ? ", NEW" : ""}${c.thread ? `, thread day ${c.thread.days}` : ""}${c.model ? `, model: ${Math.round(c.model.pBig * 100)}% big-move odds${c.model.ok?.dir && c.model.pUp != null ? `, lean ${c.model.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(c.model.pUp, 1 - c.model.pUp) * 100)}%` : ""}` : ""}${c.assets?.length ? `, markets most likely to move: ${assetsLine(c.assets)}` : ""}) → since the headline: ${Object.entries(c.react).map(([k, r]) => `${k} ${r.mv > 0 ? "+" : ""}${r.mv}${r.unit} (${r.u ?? "?"}× a normal day, ${r.st})`).join("; ") || "no reaction data"}${c.keys.length ? ` :: ${c.keys.slice(0, 2).join(" ")}`.slice(0, 380) : ""}${c.analogs.length ? ` || past analogs: ${c.analogs.slice(0, 3).map((a) => `${a.d} "${a.title.slice(0, 70)}" NQ 1h ${a.nq > 0 ? "+" : ""}${a.nq}%`).join("; ")}` : ""}`).join("\n") || "no fresh catalysts";
 }
 const NEWS_PLAYBOOK = `NEWS-TRADING PLAYBOOK
 - Continuation: fresh (under 30-45 minutes), confirmed by 2+ outlets or official, NOT yet priced (under ~0.3× a normal day's move) and pointing the same way as the main driver → enter on a stop order through the post-headline range or on the first shallow pullback; stop beyond the headline's origin price or the post-headline swing.
@@ -5386,7 +5410,54 @@ function addStockAb(out, t0, t1, tk) {
   for (const T of tk) { const x = a.stk?.[T], y = b.stk?.[T]; if (x?.[0] && y?.[0] && x !== y) ab[T] = Math.round((((y[0] - x[0]) / x[0]) * 100 - nq) * 100) / 100; }
   if (Object.keys(ab).length) out.S = ab; return out;
 }
-function measure(t0, t1, tk) {
+/* the latest value of one key at time t that a snapshot actually refreshed (q key, "x:" sector, "s:" stock) */
+function snapIdx(t) { let lo = 0, hi = S.snaps.length - 1, ans = -1; while (lo <= hi) { const mid = (lo + hi) >> 1; if (S.snaps[mid].t <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1; } return ans; }
+function valAt(key, t, tol) {
+  for (let i = snapIdx(t + 2 * MIN); i >= 0; i--) {
+    const s = S.snaps[i]; if (t - s.t > tol) return null;
+    const v = key.startsWith("s:") ? s.stk?.[key.slice(2)] : key.startsWith("x:") ? s.sec?.[key.slice(2)] : s.q?.[key];
+    if (v == null || v[0] == null) continue; if (s.u && !s.u.includes(key)) continue; return { t: s.t, v };
+  }
+  return null;
+}
+function barNear(T, t, tol) { const ser = [...(S.fx?.b5?.[T] || []), ...(S.fx?.bars?.[T] || [])]; let best = null; for (const b of ser) if (b[0] <= t + 2 * MIN && t - b[0] <= tol && (!best || b[0] > best[0])) best = b; return best; }
+/* every instrument's reaction between t0 and t1: % (yields in bp, stocks relative to the Nasdaq), only where its market was open and its price was refreshed */
+const MV_GATE = { crypto: () => true, index: futOpen, rates: futOpen, fx: futOpen, commodity: futOpen, vol: usOpen, etf: usOpen, sector: usOpen, credit: usOpen, stock: usOpen };
+function measureAssets(t0, t1, tk) {
+  const M = window.TWNewsModel; if (!M || !S.snaps.length) return null; const out = {};
+  const open = (cls) => { const g = MV_GATE[cls] || usOpen; return g(t0) && g(t1 - 5 * MIN); };
+  const pct = (a, b) => Math.round(((b - a) / a) * 10000) / 100;
+  for (const [k, [cls]] of Object.entries(M.ASSETS)) {
+    if (!open(cls)) continue;
+    if (cls === "sector" && SECT.includes(k)) {                 // sectors only carry a daily % change: diff it within one ET session
+      const a = valAt("x:" + k, t0, 30 * MIN), b = valAt("x:" + k, t1, 25 * MIN);
+      if (a && b && b.t > a.t && etDate(a.t) === etDate(b.t) && Number.isFinite(a.v[0]) && Number.isFinite(b.v[0])) out[k] = Math.round((b.v[0] - a.v[0]) * 100) / 100;
+      continue;
+    }
+    const isY = /^US\d/.test(k);
+    let a = valAt(k, t0, 30 * MIN), b = valAt(k, t1, 25 * MIN);
+    if ((!a || !b) && cls === "fx") { const x = barNear(k, t0, 15 * MIN), y = barNear(k, t1, 15 * MIN); if (x && y) { a = { t: x[0], v: [x[1]] }; b = { t: y[0], v: [y[1]] }; } }
+    if (!a || !b || b.t <= a.t || !a.v[0]) continue;
+    out[k] = isY ? Math.round((b.v[0] - a.v[0]) * 1000) / 10 : pct(a.v[0], b.v[0]);
+  }
+  // named stocks, relative to the Nasdaq
+  const idx = out.NQ ?? out.QQQ ?? out.ES;
+  if (idx != null && usOpen(t0) && usOpen(t1 - 5 * MIN)) for (const T of (tk || []).slice(0, 6)) {
+    if (M.ASSETS[T] || !/^[A-Z][A-Z.]{0,5}$/.test(T)) continue;
+    const a = valAt("s:" + T, t0, 30 * MIN), b = valAt("s:" + T, t1, 25 * MIN);
+    if (a && b && b.t > a.t && a.v[0]) out[T] = Math.round((pct(a.v[0], b.v[0]) - idx) * 100) / 100;
+  }
+  return Object.keys(out).length ? out : null;
+}
+function measure(t0, t1, tk, withAssets) {
+  const v = measureNQ(t0, t1, tk); if (!withAssets) return v;
+  const A = measureAssets(t0, t1, tk);
+  if (v) { if (A) v.A = A; return v; }
+  if (!A) return v;
+  // Nasdaq closed (or its data missing) but other markets moved: keep the cross-asset reading; wait a while first if NQ might still arrive
+  return v === null || Date.now() > t1 + 2 * HOUR ? { A } : undefined;
+}
+function measureNQ(t0, t1, tk) {
   if (usOpen(t0) && usOpen(t1 - 5 * MIN) && S.bars.size) {
     const x = barAt(t0, 15 * MIN), y = barAt(t1, 12 * MIN);
     if (x && y) { const out = { QQQ: Math.round(((y - x) / x) * 10000) / 100 }; const a2 = snapAt(t0), b2 = snapAt(t1); const u = a2?.q?.US10Y?.[0], v = b2?.q?.US10Y?.[0]; if (u != null && v != null && t1 - b2.t < 30 * MIN) out.Y10 = Math.round((v - u) * 1000) / 10; return addStockAb(out, t0, t1, tk); }
@@ -5411,7 +5482,7 @@ async function stampReactions() {
     for (const [lab, dt] of [["m15", 15 * MIN], ["h1", HOUR], ["h4", 4 * HOUR]]) {
       if (lab in have) continue;
       const t1 = e.t + dt; if (now < t1 + 5 * MIN) continue;
-      let v = measure(e.t, t1, e.tk);
+      let v = measure(e.t, t1, e.tk, lab !== "m15");
       if (v === undefined && now > t1 + 30 * HOUR) v = null;  // data never arrived: give up
       if (v !== undefined) patch[lab] = v;
     }
@@ -6816,7 +6887,7 @@ const ASK_TOOLS = [
   { name: "get_entities", description: "Mention counts per day (up to 45 days) for tickers and macro actors (Fed, Powell, Iran, OPEC, Trump, tariffs, oil, AI, chips…), with today's surge versus the 7-day pace, average importance and tone. Pass names to look up specific ones; otherwise returns the most active.", inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } } } },
     execute: (i) => { const E = S.entities?.e || {}; if (Array.isArray(i.names) && i.names.length) return Object.fromEntries(i.names.map((n) => { const k = Object.keys(E).find((x) => x.toLowerCase() === String(n).toLowerCase()); return [n, k ? E[k] : null]; })); const today = dayKey(Date.now()); return Object.entries(E).sort((a, b) => (b[1].d[today] || 0) - (a[1].d[today] || 0)).slice(0, 30).map(([k, x]) => ({ name: k, today: x.d[today] || 0, surge: x.sg, total_45d: x.n, tone: x.s, last_headline: x.lt })); } },
   { name: "get_social", description: "Social and tape pulse: StockTwits trending symbols with their why-it's-trending summaries, most-discussed tickers and top posts on r/wallstreetbets and r/stocks, and today's Nasdaq trading halts (including repeated volatility halts, a momentum signal).", execute: () => S.social || {} },
-  { name: "get_news_model", description: "What Tapewire has learned from its own measurements: which news categories and outlets move the Nasdaq most (weights vs baseline), which outlets report first and how often their scoops get confirmed, and which feeds produce the most important headlines.", execute: () => ({ trained_model: S.newsModel2?.metrics ? { trained: new Date(S.newsModel2.t).toISOString(), samples: S.newsModel2.n, applied: !!S.newsModel2.active, validation: S.newsModel2.metrics, heads_ok: S.newsModel2.ok, top_features: S.newsModel2.top, suggested_alert_threshold: S.newsModel2.threshold, history: (S.newsModel2.history || []).slice(-10) } : S.newsModel2?.warming || null, model: S.newsModel ? { ...S.newsModel, seen: undefined } : null, feeds: Object.fromEntries(Object.entries(S.nb?.f || {}).map(([k, v]) => [k, { value: v.v, new_total: v.tot, important: v.hi, alerts: v.al, last: v.t ? new Date(v.t).toISOString() : null, err: v.err || null }])) }) },
+  { name: "get_news_model", description: "What Tapewire has learned from its own measurements: which news categories and outlets move the Nasdaq most (weights vs baseline), which outlets report first and how often their scoops get confirmed, and which feeds produce the most important headlines.", execute: () => ({ trained_model: S.newsModel2?.metrics ? { trained: new Date(S.newsModel2.t).toISOString(), samples: S.newsModel2.n, applied: !!S.newsModel2.active, validation: S.newsModel2.metrics, heads_ok: S.newsModel2.ok, importance_head: S.newsModel2.impHead, top_features: S.newsModel2.top, cross_asset: { what_moves_each_market: S.newsModel2.xtop, base_rates: S.newsModel2.assetBase, by_class: S.newsModel2.metrics?.xClass }, cross_asset_text: crossText(), suggested_alert_threshold: S.newsModel2.threshold, history: (S.newsModel2.history || []).slice(-10) } : S.newsModel2?.warming || null, model: S.newsModel ? { ...S.newsModel, seen: undefined } : null, feeds: Object.fromEntries(Object.entries(S.nb?.f || {}).map(([k, v]) => [k, { value: v.v, new_total: v.tot, important: v.hi, alerts: v.al, last: v.t ? new Date(v.t).toISOString() : null, err: v.err || null }])) }) },
   { name: "get_weekly_memory", description: "Weekly rollups: NQ, VIX and bitcoin change for the week, dominant story threads, most-mentioned names, data releases and biggest reactions. Up to 12 weeks.", inputSchema: { type: "object", properties: { weeks: { type: "number" } } }, execute: (i) => (S.weeks || []).slice(0, clamp(+i.weeks || 4, 1, 12)) },
   { name: "analyst_view", description: "Wall Street analyst ratings, price targets and recommendation trend for one US stock or ETF, live from Twelve Data. Uses 1 Twelve Data call.", inputSchema: { type: "object", properties: { ticker: { type: "string" }, data_type: { type: "string", enum: ["ratings", "price_target", "recommendations", "eps_trend", "eps_revisions"] } }, required: ["ticker"] }, execute: async (i) => { const r = await tdCall("tq", "get_analyst_data", { symbol: String(i.ticker || "").toUpperCase(), data_type: ["ratings", "price_target", "recommendations", "eps_trend", "eps_revisions"].includes(i.data_type) ? i.data_type : "ratings" }); if (!r.ok) throw new Error("Twelve Data couldn't return analyst data (" + r.code + ")."); return String(r.text).slice(0, 6000); } }
 ];
@@ -7206,11 +7277,21 @@ function paintThreadsMemory() {
   $("#thrNote").textContent = `${items.length} thread${items.length === 1 ? "" : "s"}`;
   $("#threads").innerHTML = items.length ? items.slice(0, 40).map((t) => threadRow(t, now, true)).join("") : `<div class="body note">Threads are Tapewire's persistent story memory. Every 10 minutes the collector folds the day's story clusters into threads that last across days: each keeps a day-by-day timeline, the outlets that covered it, how fast it's growing and how the Nasdaq moved after its headlines. Headlines that only rehash an old thread lose a little importance; genuinely new ones gain a little.</div>`;
 }
+function crossHTML(M) {
+  const m = M.metrics; if (!m?.xaN) return `<p class="note" style="margin:8px 0 0">Cross-asset model: waiting for measured reactions across markets (index futures, yields, the dollar and FX, commodities, crypto, sectors and named stocks).</p>`;
+  const pc = (v) => (v == null ? "—" : Math.round(v * 100) + "%"); const f2 = (v) => (v == null ? "—" : (+v).toFixed(2));
+  const NAME = { index: "Index futures", vol: "Volatility", rates: "Rates", fx: "FX & dollar", commodity: "Commodities", crypto: "Crypto", etf: "ETFs", sector: "Sectors", credit: "Credit", stock: "Named stocks" };
+  const rows = Object.entries(m.xClass || {}).sort((a, b) => b[1].n - a[1].n).map(([c, v]) => `<tr><td>${esc(NAME[c] || c)}</td><td>${v.n}</td><td>${pc(v.rate)}</td><td><b class="${v.auc != null ? (v.auc >= 0.55 && v.auc > (v.baseAuc ?? 0.5) ? "up" : "down") : ""}">${f2(v.auc)}</b></td><td>${f2(v.baseAuc)}</td><td>${v.dirAcc != null ? `${pc(v.dirAcc)} <span class="muted">vs ${pc(v.dirBase)}</span>` : "—"}</td></tr>`).join("");
+  const what = Object.entries(M.xtop?.asset || {}).sort((a, b) => (b[1][0]?.[1] || 0) - (a[1][0]?.[1] || 0)).slice(0, 16).map(([k, arr]) => `<div style="margin:3px 0"><b>${esc(k)}</b> <span class="muted">${esc(assetName(k) !== k ? assetName(k) : "")}</span> ${arr.slice(0, 6).map((x) => `<span class="tk">${esc(String(x[0]).replace(/_/g, " ").replace(/&/g, " + "))}</span>`).join(" ")}</div>`).join("");
+  return `<div class="h2" style="font-size:11px;margin:12px 0 4px">Across asset classes</div><p class="note" style="margin:0 0 6px">One model over every (headline, instrument) pair: index futures, VIX, Treasury yields, the dollar and FX pairs, oil, gold, silver, copper, gas, crypto, ETFs, sectors and each stock a headline names. It learns which stories move which market and which way. ${m.anyAuc != null ? `Finding headlines that move <i>any</i> major market: AUC <b>${f2(m.anyAuc)}</b> vs rule score ${f2(m.anyBaseAuc)} (${m.anyN} headlines${m.anyPrecTop != null ? `; top-fifth hit rate ${pc(m.anyPrecTop)} vs ${pc(m.anyPrecTopBase)}` : ""}).` : ""} Importance uses the ${M.impHead === "any" ? "any-market" : "Nasdaq"} head.</p>
+    <div class="md"><div class="tbl"><table><tr><th>Asset class</th><th>Pairs</th><th>Big-move rate</th><th>AUC</th><th>Rules</th><th>Direction</th></tr>${rows}<tr><td><b>All</b></td><td>${m.xaN}</td><td></td><td><b>${f2(m.xaAuc)}</b></td><td>${f2(m.xaBaseAuc)}</td><td>${pc(m.xdAcc)}</td></tr></table></div></div>
+    ${what ? `<div class="note" style="margin:8px 0 2px">What moves each market (strongest learned triggers)</div>${what}` : ""}`;
+}
 function model2HTML() {
   const M = S.newsModel2; const busy = S.m2Busy; const pc = (v) => (v == null ? "—" : Math.round(v * 100) + "%"); const f2 = (v) => (v == null ? "—" : (+v).toFixed(2));
   const head = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Trained model</b><span class="row">${M?.t ? `<span class="note">trained ${esc(ago(M.t))}</span>` : ""}<button class="btn sm" type="button" data-m2-retrain ${busy ? "disabled" : ""}>${busy ? "Training…" : "Retrain now"}</button></span></div>`;
-  const intro = `<p class="note" style="margin:0 0 8px">A machine-learned model trained on every headline whose Nasdaq reaction Tapewire has measured: its words and phrases, outlet, feed, category, tickers, topics, time of day, market regime, tone, novelty, how many outlets confirmed it and any data surprise. Moves are scaled by how volatile the market was at the time. It predicts the chance of an outsized NQ hour, the size and direction of the move, big 10-year moves, and how far a stock beats or lags the Nasdaq. It is tested walk-forward on headlines it never saw, and it only changes importance scores while it beats the rule-based score.</p>`;
-  if (!M?.metrics) return head + intro + `<p class="note" style="margin:0 0 12px">${M?.warming ? `Warming up: ${M.warming.n} of the ${M.warming.need} measured headlines it needs. Reactions are measured during US hours while Tapewire is open.` : "Not trained yet."}</p>`;
+  const intro = `<p class="note" style="margin:0 0 8px">A machine-learned model trained on every headline whose Nasdaq reaction Tapewire has measured: its words and phrases, outlet, feed, category, tickers, topics, time of day, market regime, tone, novelty, how many outlets confirmed it and any data surprise. Moves are scaled by how volatile the market was at the time. It predicts the chance of an outsized NQ hour, the size and direction of the move, big 10-year moves, how far a stock beats or lags the Nasdaq, and, across asset classes, which instruments (futures, yields, FX, commodities, crypto, sectors, the named stocks) a headline will move and which way. It is tested walk-forward on headlines it never saw, and it only changes importance scores while it beats the rule-based score.</p>`;
+  if (!M?.metrics) return head + intro + `<p class="note" style="margin:0 0 12px">${M?.warming ? `Warming up: ${M.warming.n} of the ${M.warming.need} measured headlines it needs. Reactions are measured while Tapewire is open and each market trades (crypto around the clock).` : "Not trained yet."}</p>`;
   const m = M.metrics; const row = (lab, a, b, good) => `<tr><td>${lab}</td><td><b class="${good == null ? "" : good ? "up" : "down"}">${a}</b></td><td>${b}</td></tr>`;
   const tbl = `<div class="md"><div class="tbl"><table><tr><th>Tested on unseen headlines</th><th>Model</th><th>Rule score</th></tr>
     ${row("Finds headlines that move NQ ≥1.5× a normal hour (AUC; 0.5 = coin flip)", f2(m.auc), f2(m.baseAuc), m.auc != null && m.baseAuc != null ? m.auc > m.baseAuc : null)}
@@ -7229,7 +7310,7 @@ function model2HTML() {
   const thr = M.threshold ? `<p style="margin:10px 0 0">Best alert threshold on recent headlines: <b>${M.threshold.thr}</b> (catches ${pc(M.threshold.rec)} of big moves, ${pc(M.threshold.prec)} of alerts are real). Current: <b>${S.config.alertThreshold}</b>. ${Math.abs(M.threshold.thr - S.config.alertThreshold) >= 0.5 ? `<button class="btn sm" type="button" data-apply-thr="${M.threshold.thr}">Use ${M.threshold.thr}</button>` : ""}</p>` : "";
   const hist = (M.history || []).slice(-8).reverse();
   const hh = hist.length ? `<div class="md" style="margin-top:8px"><div class="tbl"><table><tr><th>Retrained</th><th>Headlines</th><th>AUC</th><th>Rules</th><th>Direction</th><th>Result</th></tr>${hist.map((h) => `<tr><td>${esc(new Date(h.t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${h.n}</td><td>${f2(h.auc)}</td><td>${f2(h.baseAuc)}</td><td>${pc(h.dirAcc)}</td><td>${h.kept === false ? "rejected" : h.active ? "applied" : "learning"}</td></tr>`).join("")}</table></div></div>` : "";
-  return head + intro + status + tbl + cal + tops + thr + hh + `<hr style="border:0;border-top:1px solid var(--line-2);margin:14px 0">`;
+  return head + intro + status + tbl + crossHTML(M) + cal + tops + thr + hh + `<hr style="border:0;border-top:1px solid var(--line-2);margin:14px 0">`;
 }
 function paintNewsModel() {
   paintNewsModelLegacy();
@@ -7240,7 +7321,7 @@ function paintNewsModelLegacy() {
   $("#modelNote").textContent = M?.t ? `trained ${ago(M.t)}${S.config.learn === false ? " · off" : ""}` : "";
   const nb = S.nb?.f || {}; const feeds = nbFeeds().map((f) => [f, nb[f.id]]).filter(([, st]) => st?.fetch).sort((a, b) => (b[1].v ?? 0) - (a[1].v ?? 0));
   const feedTbl = feeds.length ? `<h3 class="h2" style="margin:14px 0 6px;font-size:11.5px;color:var(--muted)">Most productive feeds (polled more often)</h3><div class="md"><div class="tbl"><table><tr><th>Feed</th><th>Value</th><th>New</th><th>Important</th><th>Alerts</th></tr>${feeds.slice(0, 10).map(([f, st]) => `<tr><td>${esc(f.name)}</td><td>${fmtN(st.v, 1)}</td><td>${st.tot || 0}</td><td>${st.hi || 0}</td><td>${st.al || 0}</td></tr>`).join("")}</table></div></div>` : "";
-  if (!M?.n) { box.innerHTML = `<p class="note" style="margin:0">Tapewire measures how far the Nasdaq moves in the hour after each notable headline. As those measurements pile up, the model learns which categories and outlets actually move NQ and which feeds break news first, and nudges importance scores up or down (at most about ±2 points). It retrains every 3 hours. Nothing to show until reactions have been measured during cash hours.</p>${feedTbl}`; return; }
+  if (!M?.n) { box.innerHTML = `<p class="note" style="margin:0">Tapewire measures how far each market moves in the hour after every notable headline: index futures, VIX, Treasury yields, the dollar and FX pairs, oil, gold and other commodities, crypto, sector ETFs and the stocks the headline names. As those measurements pile up, the model learns which stories move which markets and which way, which outlets and feeds break news first, and nudges importance scores up or down (at most about ±2.5 points). It retrains every 3 hours. Crypto is measured around the clock; other markets while they trade.</p>${feedTbl}`; return; }
   const cls = Object.entries(M.cls || {}).sort((a, b) => b[1].m - a[1].m);
   const rel = Object.entries(M.rel || {}).filter(([, v]) => v.multi >= 3).map(([k, v]) => ({ k, v, f: v.first / v.multi, conf: (v.conf + 1) / (v.conf + v.solo + 2) })).sort((a, b) => b.f - a.f).slice(0, 10);
   box.innerHTML = `<p class="note" style="margin-top:0">Baseline: the Nasdaq moves ${M.base}% (median, either direction) in the hour after a notable headline, across ${M.n} measured events. A weight above 1× means that kind of news moves NQ more than usual, so it's scored higher.</p>

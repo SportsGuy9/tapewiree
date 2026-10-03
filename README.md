@@ -83,7 +83,19 @@ Each request can read up to `TAPEWIRE_PROMPT_KB` of the library (default 160 KB,
 
 ## The news learning system
 
-Every notable headline's market reaction is measured 15 minutes, 1 hour and 4 hours after it lands: NQ (or QQQ in cash hours), the 10-year yield, and each named stock's move relative to the Nasdaq. Each measurement is stored with the headline's text and context. Those records train a model (`public/newsmodel.js`):
+Every notable headline's market reaction is measured 15 minutes, 1 hour and 4 hours after it lands, across asset classes:
+
+| Class | Instruments |
+|---|---|
+| Index futures and volatility | NQ, ES, RTY, YM, VIX |
+| Rates and credit | US 2Y, 5Y and 10Y yields (in basis points), TLT, HYG |
+| Dollar and FX | DXY, EURUSD, USDJPY, GBPUSD, AUDUSD, USDCAD, USDCHF, NZDUSD, USDCNH, USDMXN, EURJPY, GBPJPY |
+| Commodities | WTI crude, gold, silver, copper, natural gas |
+| Crypto | BTC, ETH, SOL (around the clock, weekends included) |
+| ETFs and sectors | QQQ, IWM, SMH, and the 11 SPDR sector ETFs |
+| Stocks | every ticker the headline names, measured relative to the Nasdaq |
+
+An instrument is measured only while its market trades, and only from prices that were actually refreshed. Values carried forward from an older snapshot are skipped. Each measurement is stored with the headline's text and context. Those records train a model (`public/newsmodel.js`):
 
 - **Features:** headline words and two-word phrases, outlet, feed or provider, category, tickers, topics (Fed, Powell, Iran, OPEC, AI, chips…), time of day and weekday, market regime (risk-on or off, volatility, yields), sentiment score, a built-in finance lexicon (beat/miss, hawkish/dovish…), novelty against older story threads, how many outlets confirmed it, data-release surprise size, opinion and watchlist flags, and interactions such as category × volatility.
 - **Targets, scaled by market volatility:** moves are divided by a trailing 30-day median, so a quiet week and a wild week are judged on the same scale. The model predicts:
@@ -92,12 +104,14 @@ Every notable headline's market reaction is measured 15 minutes, 1 hour and 4 ho
   - its direction
   - the chance of a big 10-year yield move
   - the chance a stock beats or lags the Nasdaq sharply
+  - **across asset classes:** the chance of an outsized move in *any* major market (NQ, ES, 10Y, DXY, oil, gold, BTC, EURUSD, USDJPY or the named stock). Once it has enough data, this head drives importance, so an OPEC headline that moves oil but not the Nasdaq still counts.
+  - **per instrument:** one model over every (headline, instrument) pair, with instrument and asset-class interaction features, predicts each instrument's chance of a big move and its direction. It learns things like "OPEC → oil up", "BOJ → yen stronger", "Fed → yields and the dollar" and "earnings → the named stock". Each headline gets a ranked list of the markets most likely to move, with odds, lift over that instrument's normal rate and a lean.
 - **Method:** sparse linear models over hashed features, trained with AdaGrad and L2 regularisation, with recent data weighted more. Regularisation strength and the recency half-life are tuned automatically by walk-forward validation. Training runs in a background Web Worker, so the page never freezes.
 - **Validation:**
-  - Walk-forward testing (3 expanding folds) on headlines the model never saw. Metrics: AUC, top-fifth precision, Spearman correlation, Brier score and calibration, each compared with the old rule-based score.
+  - Walk-forward testing (3 expanding folds) on headlines the model never saw. Metrics: AUC, top-fifth precision, Spearman correlation, Brier score and calibration, each compared with the old rule-based score. Cross-asset results are reported per asset class (AUC and direction accuracy vs the usual side).
   - A live record of predictions stamped on each headline as it arrived, scored after its reaction was measured.
   - Champion/challenger: a retrain that tests clearly worse doesn't replace the model in use.
-- **Use:** once the model beats the rule score on unseen data, it adjusts every headline's importance by up to ±2.5 points. That changes alerts, story ranking, which articles get read in full, news-bus feed priority and the catalyst board. Each headline shows the model's odds, lean and the features that drove them. The model also suggests the alert threshold with the best precision/recall trade-off.
+- **Use:** once the model beats the rule score on unseen data, it adjusts every headline's importance by up to ±2.5 points. That changes alerts, story ranking, which articles get read in full, news-bus feed priority and the catalyst board. Each headline shows the model's odds, lean, the features that drove them and the markets it is most likely to move. The catalyst board adds those markets to each story's watch list, with their reaction since the headline. The model also suggests the alert threshold with the best precision/recall trade-off.
 - It retrains every 3 hours (or press **Retrain now**). Ask the desk, briefings and the idea generator read its findings. It needs about 80 measured headlines before it starts.
 
 ## Files

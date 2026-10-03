@@ -3,8 +3,14 @@
    Data:     one row per measured headline: its text, outlet, feed, category, tickers, entities, timing, regime,
              tone, novelty, source count and data surprise, joined with what NQ / QQQ (and the 10-year yield,
              and the stock itself versus the Nasdaq) did in the hour after it.
-   Targets:  moves are first normalised by the volatility of the time (a trailing median of measured moves),
-             so a 0.3% hour in a calm week and a 0.9% hour in a wild week are judged on the same scale.
+   Targets:  moves are first normalised by the volatility of the time (a trailing median of measured moves, per
+             instrument), so a 0.3% hour in a calm week and a 0.9% hour in a wild week are judged on the same scale.
+             Cross-asset: every measured instrument (index futures, VIX, Treasury yields, the dollar and FX pairs,
+             oil/gold/silver/copper/gas, crypto, ETFs and sectors, and each stock a headline names) is a target:
+               any    P(a big move in any major market: NQ, ES, 10Y, DXY, oil, gold, BTC, EURUSD, USDJPY, or the named stock)
+               xa     P(big move in instrument A | headline)   one model over (headline x instrument) pairs, with
+                      instrument and asset-class interactions, so it learns "OPEC -> oil, CAD", "BOJ -> yen", "FDA -> the stock"
+               xd     P(instrument A rises | it moved meaningfully)
                big    P(NQ move >= 1.5x a typical hour)            logistic
                mag    log(1 + move / typical)                       ridge regression
                dir    P(NQ up | the move was meaningful)            logistic
@@ -28,8 +34,21 @@
   const STOP = new Set("a an the and or for with from that this these those after before over under into amid about than more most new says said will would could can may might has have had not but what why how who when where which their there they them his her our your you just still also out week weeks today stock stocks market markets shares report reports its are was were been being here near next last first year years month day days time to of in on at by as is be it up down vs via".split(" "));
   const ET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 
+  /* the instrument panel: key -> [asset class, words that mean the headline is about it] */
+  const ASSETS = {
+    NQ: ["index", /\bnasdaq\b|tech stocks|\bnq\b/], ES: ["index", /s&p|wall street|stock market|\bes\b/], RTY: ["index", /russell|small[- ]caps?/], YM: ["index", /\bdow\b/], VIX: ["vol", /\bvix\b|volatility/],
+    US10Y: ["rates", /treasur|yields?|bonds?|10-year/], US2Y: ["rates", /2-year|two-year|treasur|yields?|fed\b/], US5Y: ["rates", /5-year|treasur|yields?/],
+    DXY: ["fx", /dollar|greenback|\bdxy\b/], EURUSD: ["fx", /\beuro\b|\becb\b|lagarde|eurozone|\beur\b/], USDJPY: ["fx", /\byen\b|\bboj\b|japan|ueda/], GBPUSD: ["fx", /sterling|pound|\bboe\b|bank of england|\bgbp\b/], AUDUSD: ["fx", /aussie|australia|\brba\b|\baud\b/], USDCAD: ["fx", /loonie|canad|\bcad\b/], USDCHF: ["fx", /swiss|franc|\bsnb\b/], NZDUSD: ["fx", /kiwi|new zealand|rbnz/], USDCNH: ["fx", /yuan|renminbi|pboc|china/], USDMXN: ["fx", /peso|mexic|banxico/], EURJPY: ["fx", /\byen\b|\beuro\b/], GBPJPY: ["fx", /sterling|\byen\b/],
+    WTI: ["commodity", /\boil\b|crude|opec|brent|\bwti\b|hormuz|refiner/], GOLD: ["commodity", /\bgold\b|bullion/], SILVER: ["commodity", /silver/], COPPER: ["commodity", /copper/], NATGAS: ["commodity", /natural gas|\blng\b|natgas/],
+    BTC: ["crypto", /bitcoin|\bbtc\b|crypto/], ETH: ["crypto", /ether(eum)?|\beth\b|crypto/], SOL: ["crypto", /solana|\bsol\b|crypto/],
+    QQQ: ["etf", /nasdaq|tech stocks/], SMH: ["sector", /chip|semiconductor|nvidia|tsmc|\bhbm\b|micron|broadcom/], IWM: ["etf", /russell|small[- ]caps?/], TLT: ["rates", /treasur|long bond|30-year/], HYG: ["credit", /junk|high[- ]yield|credit spread|default/],
+    XLK: ["sector", /tech|software|apple|microsoft/], XLF: ["sector", /bank|financial|lender|jpmorgan|goldman/], XLE: ["sector", /energy|oil|exxon|chevron/], XLV: ["sector", /health|pharma|biotech|\bfda\b|drug/], XLY: ["sector", /retail|consumer|amazon|tesla|auto/], XLC: ["sector", /meta|google|alphabet|netflix|media|telecom/], XLI: ["sector", /industrial|boeing|defen[cs]e|airline|rail/], XLP: ["sector", /staples|food|beverage|walmart|costco/], XLU: ["sector", /utilit|power grid|electricity/], XLRE: ["sector", /real estate|reit|housing|mortgage/], XLB: ["sector", /materials|chemical|mining|steel/]
+  };
+  const CORE = ["NQ", "ES", "US10Y", "DXY", "WTI", "GOLD", "BTC", "EURUSD", "USDJPY"];
+  const assetClass = (k) => ASSETS[k]?.[0] || "stock";
+  const DIMX = 1 << 18;
   function fnv(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-  const hidx = (name) => fnv(name) % DIM;
+  const hidx = (name, dim = DIM) => fnv(name) % dim;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const sigmoid = (z) => 1 / (1 + Math.exp(-clamp(z, -30, 30)));
   const logit = (p) => Math.log(clamp(p, 1e-4, 1 - 1e-4) / (1 - clamp(p, 1e-4, 1 - 1e-4)));
@@ -112,25 +131,65 @@
     }
     return out;
   }
+  /* trailing 30-day median |move| for one instrument at each time it was measured */
+  function seriesScale(points, floor) {
+    const all = points.map((p) => Math.abs(p.v)).sort((a, b) => a - b); const glob = all.length ? all[Math.floor(all.length / 2)] : floor; const win = []; const out = new Map();
+    for (const p of points) {
+      while (win.length && (p.t - win[0].t > 30 * DAYMS || win.length > 300)) win.shift();
+      let s = glob; if (win.length >= 12) { const v = win.map((x) => x.a).sort((a, b) => a - b); s = v[Math.floor(v.length / 2)]; }
+      out.set(p, Math.max(s, floor)); win.push({ t: p.t, a: Math.abs(p.v) });
+    }
+    return out;
+  }
+  const FLOOR = { rates: 0.4, vol: 0.5, fx: 0.01, crypto: 0.05, stock: 0.05 };
+  /* r.mv: { instrument: move (percent; basis points for yields) }, r.mvS: { ticker: move relative to the Nasdaq } */
+  function assetMoves(r) {
+    const out = {};
+    for (const [k, v] of Object.entries(r.mv || {})) if (Number.isFinite(v)) out[k] = v;
+    if (out.NQ == null && Number.isFinite(r.m1)) out.NQ = r.m1;
+    if (out.US10Y == null && Number.isFinite(r.y10)) out.US10Y = r.y10;
+    for (const [k, v] of Object.entries(r.mvS || {})) if (Number.isFinite(v) && !ASSETS[k]) out[k] = v;
+    if (Number.isFinite(r.ab) && r.tk?.[0] && !ASSETS[r.tk[0]] && out[r.tk[0]] == null) out[r.tk[0]] = r.ab;
+    return out;
+  }
+  function pairFeatures(F, k, cls, title, tk) {
+    const out = [["A=" + k, 1], ["AC=" + cls, 1]];
+    const self = (tk || []).includes(k);
+    const ment = cls !== "stock" && ASSETS[k]?.[1]?.test(String(title || "").toLowerCase());
+    if (self) out.push(["self", 1], ["self&AC=" + cls, 1]); if (ment) out.push(["ment", 1], ["ment&AC=" + cls, 1], ["ment&A=" + k, 1]);
+    for (const [nm, v] of F) {
+      if (nm === "bias") continue; const pre = nm.includes("=") ? nm.slice(0, nm.indexOf("=")) : nm;
+      out.push([nm, v * 0.5]);                                   // shared: news that moves everything
+      out.push(["AC=" + cls + "|" + nm, v]);                       // what moves this asset class
+      if (cls !== "stock" && /^(c|w|b|e|tk|lex_pos|lex_neg|hawk|dove|hawk&macro|sent_pos|sent_neg|cal_better|cal_worse|cal_surp)$/.test(pre)) out.push(["A=" + k + "|" + nm, v]); // what moves this instrument
+    }
+    return out;
+  }
   function buildDataset(recs) {
-    const rows = recs.filter((r) => Number.isFinite(r.m1) && r.t && r.title).sort((a, b) => a.t - b.t);
-    const sN = rollingScale(rows, "m1"); const sY = rollingScale(rows, "y10"); const sS = rollingScale(rows, "ab");
+    const rows = recs.filter((r) => r.t && r.title && (Number.isFinite(r.m1) || Object.keys(r.mv || {}).length)).sort((a, b) => a.t - b.t);
+    // per-instrument volatility scales (stocks share one pooled scale: each name is measured too rarely)
+    const pts = {}; const mvOf = rows.map((r) => assetMoves(r));
+    rows.forEach((r, i) => { for (const [k, v] of Object.entries(mvOf[i])) { const key = assetClass(k) === "stock" ? "$stock" : k; (pts[key] ||= []).push({ t: r.t, v, i, k }); } });
+    const z = rows.map(() => ({}));
+    for (const [key, list] of Object.entries(pts)) { const cls = key === "$stock" ? "stock" : assetClass(key); const sc = seriesScale(list, FLOOR[cls] ?? 0.03); for (const p of list) z[p.i][p.k] = { z: Math.abs(p.v) / sc.get(p), v: p.v }; }
     return rows.map((r, i) => {
-      const z = Math.abs(r.m1) / sN[i];
-      const zy = Number.isFinite(r.y10) ? Math.abs(r.y10) / sY[i] : null;
-      const zs = Number.isFinite(r.ab) ? Math.abs(r.ab) / sS[i] : null;
-      return { r, t: r.t, f: featurize(r), z, big: z >= 1.5 ? 1 : 0, mag: Math.log1p(z), up: z >= 0.5 ? (r.m1 > 0 ? 1 : 0) : null, ybig: zy == null ? null : zy >= 1.5 ? 1 : 0, sbig: zs == null ? null : zs >= 1.5 ? 1 : 0, ri: Number.isFinite(r.ri) ? r.ri : 5, sent: r.sent };
+      const f = featurize(r); const zz = z[i];
+      const nq = zz.NQ; const zy = zz.US10Y; const stk = Object.entries(zz).find(([k]) => assetClass(k) === "stock");
+      const coreZ = Object.entries(zz).filter(([k]) => CORE.includes(k) || assetClass(k) === "stock").map(([, x]) => x.z);
+      const pairs = Object.entries(zz).map(([k, x]) => ({ k, cls: assetClass(k), big: x.z >= 1.5 ? 1 : 0, up: x.z >= 0.5 ? (x.v > 0 ? 1 : 0) : null, f: pairFeatures(f, k, assetClass(k), r.title, r.tk) }));
+      return { r, t: r.t, f, z: nq ? nq.z : null, big: nq ? (nq.z >= 1.5 ? 1 : 0) : null, mag: nq ? Math.log1p(nq.z) : null, up: nq && nq.z >= 0.5 ? (nq.v > 0 ? 1 : 0) : null,
+        ybig: zy ? (zy.z >= 1.5 ? 1 : 0) : null, sbig: stk ? (stk[1].z >= 1.5 ? 1 : 0) : null, any: coreZ.length ? (Math.max(...coreZ) >= 1.75 ? 1 : 0) : null, pairs, ri: Number.isFinite(r.ri) ? r.ri : 5, sent: r.sent };
     });
   }
-  function hashRow(f) { return f.map(([name, v]) => [hidx(name), v]); }
+  function hashRow(f, dim = DIM) { return f.map(([name, v]) => [hidx(name, dim), v]); }
   function trainHead(rows, target, kind, opt = {}) {
-    const w = new Float64Array(DIM), g2 = new Float64Array(DIM).fill(1e-6);
+    const dim = opt.dim || DIM; const w = new Float64Array(dim), g2 = new Float64Array(dim).fill(1e-6);
     const lr = kind === "linear" ? 0.06 : 0.12, l2 = opt.l2 ?? 2e-4, epochs = opt.epochs ?? 6;
     const use = rows.filter((x) => x[target] != null);
     if (use.length < 20) return null;
     const newest = use[use.length - 1].t; const half = opt.half ?? 60 * DAYMS;
     const sw = use.map((x) => Math.pow(0.5, (newest - x.t) / half));
-    const H = use.map((x) => x.h || (x.h = hashRow(x.f)));
+    const H = use.map((x) => x.h || (x.h = hashRow(x.f, dim)));
     let seed = 7; const order = use.map((_, i) => i);
     let mean = 0; if (kind === "linear") { let s = 0, ws = 0; use.forEach((x, i) => { s += x[target] * sw[i]; ws += sw[i]; }); mean = s / ws; }
     for (let ep = 0; ep < epochs; ep++) {
@@ -142,7 +201,7 @@
         for (const [i, v] of h) { const g = err * v + l2 * w[i]; g2[i] += g * g; w[i] -= (lr / Math.sqrt(g2[i])) * g; }
       }
     }
-    return { kind, w, mean, n: use.length, pos: kind === "linear" ? null : use.reduce((a, x) => a + x[target], 0) / use.length };
+    return { kind, w, dim, mean, n: use.length, pos: kind === "linear" ? null : use.reduce((a, x) => a + x[target], 0) / use.length };
   }
   function scoreHead(head, h) { if (!head) return null; let z = head.kind === "linear" ? head.mean : 0; for (const [i, v] of h) z += (head.w[i] || 0) * v; return head.kind === "linear" ? z : sigmoid(z); }
 
@@ -181,16 +240,47 @@
       n: test.length, baseRate: round(base), auc: round(auc(pb, big)), baseAuc: round(auc(test.map((x) => x.ri), big)),
       brier: round(brier), brierBase: round(base * (1 - base)), spearman: round(spearman(pm, test.map((x) => x.z))), spearmanBase: round(spearman(test.map((x) => x.ri), test.map((x) => x.z))),
       dirN: dirRows.length, dirAcc: round(dirAcc), dirBase: round(dirBase), ratesAuc: pr.length >= 20 ? round(auc(pr.map((x) => x[1]), pr.map((x) => x[0]))) : null, stockAuc: ps.length >= 20 ? round(auc(ps.map((x) => x[1]), ps.map((x) => x[0]))) : null,
-      precTop: round(topK(pb)), precTopBase: round(topK(test.map((x) => x.ri))), calib: calibration(pb, big)
+      precTop: round(topK(pb)), precTopBase: round(topK(test.map((x) => x.ri))), calib: calibration(pb, big),
+      ...evalAny(H, test, hs), ...evalCross(H, test)
     };
   }
-  function trainHeads(rows, opt) {
-    return { big: trainHead(rows, "big", "logit", opt), mag: trainHead(rows, "mag", "linear", opt), dir: trainHead(rows, "up", "logit", opt), rates: trainHead(rows, "ybig", "logit", opt), stock: trainHead(rows, "sbig", "logit", opt) };
+  function evalAny(H, test, hs) {
+    const rows = test.map((x, i) => [x.any, scoreHead(H.any, hs[i]), x.ri]).filter((x) => x[0] != null && x[1] != null);
+    if (rows.length < 20) return { anyAuc: null, anyBaseAuc: null, anyN: rows.length };
+    const k = Math.max(1, Math.floor(rows.length / 5)); const top = (j) => rows.slice().sort((a, b) => b[j] - a[j]).slice(0, k).reduce((a, x) => a + x[0], 0) / k;
+    return { anyN: rows.length, anyAuc: round(auc(rows.map((x) => x[1]), rows.map((x) => x[0]))), anyBaseAuc: round(auc(rows.map((x) => x[2]), rows.map((x) => x[0]))), anyRate: round(rows.reduce((a, x) => a + x[0], 0) / rows.length), anyPrecTop: round(top(1)), anyPrecTopBase: round(top(2)) };
+  }
+  function evalCross(H, test) {
+    if (!H.xa) return { xaN: 0 };
+    const P = []; for (const x of test) for (const p of x.pairs) { const h = p.h || (p.h = hashRow(p.f, DIMX)); P.push({ cls: p.cls, k: p.k, big: p.big, up: p.up, pb: scoreHead(H.xa, h), pu: H.xd ? scoreHead(H.xd, h) : null, ri: x.ri }); }
+    if (P.length < 30) return { xaN: P.length };
+    const byCls = {};
+    for (const c of [...new Set(P.map((p) => p.cls))]) {
+      const q = P.filter((p) => p.cls === c); if (q.length < 20) continue;
+      const d = q.filter((p) => p.up != null && p.pu != null); const upr = d.length ? d.filter((p) => p.up).length / d.length : null;
+      byCls[c] = { n: q.length, rate: round(q.reduce((a, p) => a + p.big, 0) / q.length), auc: round(auc(q.map((p) => p.pb), q.map((p) => p.big))), baseAuc: round(auc(q.map((p) => p.ri), q.map((p) => p.big))), dirN: d.length, dirAcc: d.length >= 15 ? round(d.filter((p) => (p.pu >= 0.5 ? 1 : 0) === p.up).length / d.length) : null, dirBase: upr == null ? null : round(Math.max(upr, 1 - upr)) };
+    }
+    const d = P.filter((p) => p.up != null && p.pu != null);
+    return { xaN: P.length, xaAuc: round(auc(P.map((p) => p.pb), P.map((p) => p.big))), xaBaseAuc: round(auc(P.map((p) => p.ri), P.map((p) => p.big))), xdAcc: d.length >= 20 ? round(d.filter((p) => (p.pu >= 0.5 ? 1 : 0) === p.up).length / d.length) : null, xdN: d.length, xClass: byCls };
+  }
+  function trainHeads(rows, opt, cross = true) {
+    const H = { big: trainHead(rows, "big", "logit", opt), mag: trainHead(rows, "mag", "linear", opt), dir: trainHead(rows, "up", "logit", opt), rates: trainHead(rows, "ybig", "logit", opt), stock: trainHead(rows, "sbig", "logit", opt), any: trainHead(rows, "any", "logit", opt) };
+    if (cross) {
+      const pairs = []; for (const x of rows) for (const p of x.pairs) pairs.push({ t: x.t, f: p.f, h: p.h, big: p.big, up: p.up, _p: p });
+      const o = { ...opt, dim: DIMX, epochs: 4 };
+      H.xa = trainHead(pairs, "big", "logit", o); H.xd = trainHead(pairs, "up", "logit", o);
+      for (const q of pairs) q._p.h = q.h; // keep hashed rows for reuse
+    }
+    return H;
   }
   function avgMetrics(list) {
     const keys = Object.keys(list[0] || {}).filter((k) => typeof list[0][k] === "number" || list[0][k] === null);
-    const out = {}; for (const k of keys) { const v = list.map((m) => m[k]).filter(Number.isFinite); out[k] = v.length ? round(k === "n" || k === "dirN" ? v.reduce((a, b) => a + b, 0) : v.reduce((a, b) => a + b, 0) / v.length) : null; }
-    out.calib = list[list.length - 1]?.calib || []; return out;
+    const out = {}; for (const k of keys) { if (k.startsWith("xClass")) continue; const v = list.map((m) => m[k]).filter(Number.isFinite); out[k] = v.length ? round(k === "n" || k === "dirN" ? v.reduce((a, b) => a + b, 0) : v.reduce((a, b) => a + b, 0) / v.length) : null; }
+    out.calib = list[list.length - 1]?.calib || [];
+    // per asset-class cross-asset results, averaged over folds
+    const cl = {}; for (const m of list) for (const [c, v] of Object.entries(m.xClass || {})) (cl[c] ||= []).push(v);
+    out.xClass = Object.fromEntries(Object.entries(cl).map(([c, vs]) => [c, Object.fromEntries(Object.keys(vs[0]).map((k) => { const a = vs.map((v) => v[k]).filter(Number.isFinite); return [k, a.length ? round(k === "n" || k === "dirN" ? a.reduce((x, y) => x + y, 0) : a.reduce((x, y) => x + y, 0) / a.length) : null]; }))]));
+    return out;
   }
 
   /* walk-forward: train on the past, test on the next block, three times; then fit the production model on everything */
@@ -198,38 +288,54 @@
     const ds = buildDataset(recs);
     if (ds.length < (opt.minRows ?? 80)) return { status: "warming", n: ds.length, need: opt.minRows ?? 80 };
     const K = 3; const start = Math.floor(ds.length * 0.55);
-    const walk = (o) => { const out = []; for (let k = 0; k < K; k++) { const a = start + Math.floor(((ds.length - start) * k) / K), b = start + Math.floor(((ds.length - start) * (k + 1)) / K); const tr = ds.slice(0, a), te = ds.slice(a, b); if (te.length < 10) continue; out.push(evaluate(trainHeads(tr, o), te)); } return out; };
+    const walk = (o, cross) => { const out = []; for (let k = 0; k < K; k++) { const a = start + Math.floor(((ds.length - start) * k) / K), b = start + Math.floor(((ds.length - start) * (k + 1)) / K); const tr = ds.slice(0, a), te = ds.slice(a, b); if (te.length < 10) continue; out.push(evaluate(trainHeads(tr, o, cross), te)); } return out; };
     // hyperparameters chosen by walk-forward AUC (regularisation x recency half-life) once there is enough data to tell them apart
     const grid = ds.length >= 300 && opt.tune !== false ? [[5e-5, 30], [5e-5, 90], [2e-4, 30], [2e-4, 90], [1e-3, 30], [1e-3, 90]] : [[opt.l2 ?? 2e-4, (opt.half ?? 60 * DAYMS) / DAYMS]];
     let best = null;
-    for (const [l2, half] of grid) { const o = { ...opt, l2, half: half * DAYMS }; const f = walk(o); const m = avgMetrics(f); if (!best || (m.auc ?? 0) > (best.m.auc ?? 0)) best = { o, f, m, l2, half }; }
-    const folds = best.f; const metrics = best.m; const hyper = { l2: best.l2, halfLifeDays: best.half, tried: grid.length };
-    const H = trainHeads(ds, best.o);
-    const lift = (metrics.auc ?? 0.5) - (metrics.baseAuc ?? 0.5);
-    const active = metrics.n >= 40 && (metrics.auc ?? 0) >= 0.55 && lift >= 0.015;
+    const score = (m) => (m.anyAuc ?? m.auc ?? 0) + (m.auc ?? 0);
+    for (const [l2, half] of grid) { const o = { ...opt, l2, half: half * DAYMS }; const f = walk(o, grid.length === 1); const m = avgMetrics(f); if (!best || score(m) > score(best.m)) best = { o, f, m, l2, half }; }
+    const folds = grid.length === 1 ? best.f : walk(best.o, true); const metrics = avgMetrics(folds); const hyper = { l2: best.l2, halfLifeDays: best.half, tried: grid.length };
+    const H = trainHeads(ds, best.o, true);
+    // importance follows the cross-market "any" head when it has enough data, otherwise the NQ head
+    const impHead = metrics.anyAuc != null && (metrics.anyN || 0) >= 40 ? "any" : "big";
+    const iA = impHead === "any" ? metrics.anyAuc : metrics.auc, iB = impHead === "any" ? metrics.anyBaseAuc : metrics.baseAuc;
+    const lift = (iA ?? 0.5) - (iB ?? 0.5);
+    const active = (impHead === "any" ? metrics.anyN : metrics.n) >= 40 && (iA ?? 0) >= 0.55 && lift >= 0.015;
     const strength = active ? clamp(lift / 0.1, 0.3, 1) : 0;
-    const ok = { dir: (metrics.dirN || 0) >= 40 && (metrics.dirAcc ?? 0) >= (metrics.dirBase ?? 0.5) + 0.03, rates: (metrics.ratesAuc ?? 0) >= 0.6, stock: (metrics.stockAuc ?? 0) >= 0.6, mag: (metrics.spearman ?? 0) >= (metrics.spearmanBase ?? 0) + 0.05 };
+    const ok = { xa: (metrics.xaAuc ?? 0) >= 0.6 && (metrics.xaAuc ?? 0) > (metrics.xaBaseAuc ?? 0.5), xd: (metrics.xdAcc ?? 0) >= 0.55, dir: (metrics.dirN || 0) >= 40 && (metrics.dirAcc ?? 0) >= (metrics.dirBase ?? 0.5) + 0.03, rates: (metrics.ratesAuc ?? 0) >= 0.6, stock: (metrics.stockAuc ?? 0) >= 0.6, mag: (metrics.spearman ?? 0) >= (metrics.spearmanBase ?? 0) + 0.05 };
     // what drives each head, by feature family (names come from the training rows, weights from the production fit)
     const names = new Map(); for (const x of ds) for (const [nm] of x.f) if (!names.has(nm)) names.set(nm, hidx(nm));
     const top = {};
     for (const [hk, head] of Object.entries(H)) {
-      if (!head || head.kind === "linear") { if (!head) continue; }
+      if (!head || hk === "xa" || hk === "xd") continue;
       const fam = {}; for (const [nm, i] of names) { if (nm === "bias") continue; const f = nm.split("=")[0].split("&")[0]; (fam[f] ||= []).push([nm, head.w[i]]); }
       top[hk] = {}; for (const [f, arr] of Object.entries(fam)) { arr.sort((a, b) => b[1] - a[1]); top[hk][f] = { up: arr.slice(0, 12).filter((x) => x[1] > 0.01).map((x) => [x[0].replace(/^[^=]*=/, ""), round(x[1])]), down: arr.slice(-12).reverse().filter((x) => x[1] < -0.01).map((x) => [x[0].replace(/^[^=]*=/, ""), round(x[1])]) }; }
     }
+    // what moves each asset class and each instrument (from the cross-asset head's interaction weights)
+    const xnames = new Map(); for (const x of ds) for (const p of x.pairs) for (const [nm] of p.f) if (nm.startsWith("AC=") || nm.startsWith("A=")) if (!xnames.has(nm)) xnames.set(nm, hidx(nm, DIMX));
+    const xtop = { cls: {}, asset: {} };
+    if (H.xa) {
+      const g = {}; for (const [nm, i] of xnames) { const m = /^(AC|A)=([^|]+)\|(w|b|e|c|tk|lex_pos|lex_neg|hawk|dove|hawk&macro|sent_pos|sent_neg|cal_better|cal_worse)(=(.*))?$/.exec(nm); if (!m) continue; const bucket = m[1] === "AC" ? "cls" : "asset"; ((g[bucket] ||= {})[m[2]] ||= []).push([m[5] ? m[5] : m[3], H.xa.w[i], m[3]]); }
+      for (const b of ["cls", "asset"]) for (const [k, arr] of Object.entries(g[b] || {})) { arr.sort((x, y) => y[1] - x[1]); const seen = new Set(); const up = arr.filter((x) => x[1] > 0.02 && !seen.has(x[0]) && seen.add(x[0])).slice(0, 10).map((x) => [x[0], round(x[1])]); if (up.length) xtop[b][k] = up; }
+      if (H.xd) for (const [nm, i] of xnames) { const m = /^A=([^|]+)\|(w|b|e|lex_pos|lex_neg|hawk|dove|hawk&macro)(=(.*))?$/.exec(nm); if (!m) continue; ((xtop.dir ||= {})[m[1]] ||= []).push([m[4] || m[2], H.xd.w[i]]); }
+      for (const [k, arr] of Object.entries(xtop.dir || {})) { arr.sort((x, y) => y[1] - x[1]); const su = new Set(), sd = new Set(); xtop.dir[k] = { up: arr.filter((x) => x[1] > 0.02 && !su.has(x[0]) && su.add(x[0])).slice(0, 6).map((x) => [x[0], round(x[1])]), down: arr.slice().reverse().filter((x) => x[1] < -0.02 && !sd.has(x[0]) && sd.add(x[0])).slice(0, 6).map((x) => [x[0], round(x[1])]) }; }
+    }
+    // each instrument's base rate of big moves, so predictions can be shown as a lift over normal
+    const ab = {}; for (const x of ds) for (const p of x.pairs) { const a = (ab[p.k] ||= [0, 0]); a[0]++; a[1] += p.big; }
+    const assetBase = Object.fromEntries(Object.entries(ab).filter(([, a]) => a[0] >= 8).map(([k, a]) => [k, { n: a[0], rate: round((a[1] + 1) / (a[0] + 4)) }]));
     // suggested alert threshold: the importance level (rule score plus this model's adjustment) with the best F1 on the last fold's span
     const tail = ds.slice(start); let bestThr = null;
     const tailH = tail.map((x) => x.h || (x.h = hashRow(x.f)));
     for (let thr = 5; thr <= 9.01; thr += 0.5) {
       let tp = 0, fp = 0, fn = 0;
-      tail.forEach((x, i) => { const p = scoreHead(H.big, tailH[i]); const imp = clamp(x.ri + adjFrom(p, H.big?.pos, strength), 0, 10); const flag = imp >= thr; if (flag && x.big) tp++; else if (flag) fp++; else if (x.big) fn++; });
+      tail.forEach((x, i) => { const lab = x[impHead]; if (lab == null) return; const p = scoreHead(H[impHead], tailH[i]); const imp = clamp(x.ri + adjFrom(p, H[impHead]?.pos, strength), 0, 10); const flag = imp >= thr; if (flag && lab) tp++; else if (flag) fp++; else if (lab) fn++; });
       const prec = tp + fp ? tp / (tp + fp) : 0, rec = tp + fn ? tp / (tp + fn) : 0, f1 = prec + rec ? (2 * prec * rec) / (prec + rec) : 0;
       if (!bestThr || f1 > bestThr.f1) bestThr = { thr: round(thr, 1), prec: round(prec), rec: round(rec), f1: round(f1) };
     }
     // live track record: predictions stamped on headlines BEFORE their reaction was known (no hindsight at all)
     const lv = ds.filter((x) => Number.isFinite(x.r.pb)); const ld = lv.filter((x) => x.up != null && Number.isFinite(x.r.pu));
     const live = { n: lv.length, auc: lv.length >= 20 ? round(auc(lv.map((x) => x.r.pb), lv.map((x) => x.big))) : null, baseAuc: lv.length >= 20 ? round(auc(lv.map((x) => x.ri), lv.map((x) => x.big))) : null, dirN: ld.length, dirAcc: ld.length >= 15 ? round(ld.filter((x) => (x.r.pu >= 0.5 ? 1 : 0) === x.up).length / ld.length) : null };
-    return { status: "trained", version: VERSION, live, hyper, t: Date.now(), n: ds.length, folds: folds.length, metrics, active, ok, strength: round(strength), heads: packHeads(H), top, threshold: bestThr, scale: { nq: round(median(ds.map((x) => Math.abs(x.r.m1))), 3) } };
+    return { status: "trained", version: VERSION, live, hyper, t: Date.now(), n: ds.length, folds: folds.length, metrics, active, ok, impHead, strength: round(strength), heads: packHeads(H), top, xtop, assetBase, threshold: bestThr, scale: { nq: round(median(ds.map((x) => Math.abs(x.r.m1))), 3) } };
   }
   const median = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
   function adjFrom(p, base, strength) { if (p == null || !strength) return 0; return clamp((logit(p) - logit(base || 0.2)) * 0.9 * strength, -2.5, 2.5); }
@@ -239,24 +345,41 @@
     const out = {};
     for (const [k, h] of Object.entries(H)) {
       if (!h) continue; const nz = [];
-      for (let i = 0; i < DIM; i++) if (Math.abs(h.w[i]) > 2e-4) nz.push([i, Math.round(h.w[i] * 1e4) / 1e4]);
+      for (let i = 0; i < h.w.length; i++) if (Math.abs(h.w[i]) > 2e-4) nz.push([i, Math.round(h.w[i] * 1e4) / 1e4]);
       nz.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-      out[k] = { kind: h.kind, mean: round(h.mean, 5), pos: round(h.pos, 4), n: h.n, w: nz.slice(0, 20000) };
+      out[k] = { kind: h.kind, dim: h.w.length, mean: round(h.mean, 5), pos: round(h.pos, 4), n: h.n, w: nz.slice(0, k === "xa" || k === "xd" ? 40000 : 20000) };
     }
     return out;
   }
   const hydrated = new WeakMap();
   function hydrate(model) {
     if (!model?.heads) return null; let H = hydrated.get(model); if (H) return H; H = {};
-    for (const [k, h] of Object.entries(model.heads)) { const w = new Float32Array(DIM); for (const [i, v] of h.w || []) w[i] = v; H[k] = { kind: h.kind, mean: h.mean || 0, pos: h.pos, w }; }
+    for (const [k, h] of Object.entries(model.heads)) { const w = new Float32Array(h.dim || DIM); for (const [i, v] of h.w || []) w[i] = v; H[k] = { kind: h.kind, mean: h.mean || 0, pos: h.pos, w }; }
     hydrated.set(model, H); return H;
   }
-  function predict(model, r) {
+  function predict(model, r, opt = {}) {
     const H = hydrate(model); if (!H?.big) return null;
     const F = featurize(r); const h = F.map(([nm, v]) => [hidx(nm), v]);
-    const pBig = scoreHead(H.big, h), mag = scoreHead(H.mag, h), pUp = scoreHead(H.dir, h), pRates = scoreHead(H.rates, h), pStock = (r.tk || []).length ? scoreHead(H.stock, h) : null;
-    const contrib = F.map(([nm, v], k) => [nm, (H.big.w[h[k][0]] || 0) * v]).filter((x) => x[0] !== "bias" && Math.abs(x[1]) > 0.02).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6).map((x) => [x[0], round(x[1], 2)]);
-    return { pBig: round(pBig), mult: mag == null ? null : round(Math.max(0, Math.expm1(mag)), 2), pUp: round(pUp), pRates: round(pRates), pStock: round(pStock), adj: round(adjFrom(pBig, H.big.pos, model.active ? model.strength : 0), 2), ok: model.ok || {}, why: contrib };
+    const pBig = scoreHead(H.big, h), mag = scoreHead(H.mag, h), pUp = scoreHead(H.dir, h), pRates = scoreHead(H.rates, h), pStock = (r.tk || []).length ? scoreHead(H.stock, h) : null, pAny = H.any ? scoreHead(H.any, h) : null;
+    const ih = model.impHead === "any" && H.any ? H.any : H.big; const pImp = ih === H.any ? pAny : pBig;
+    const contrib = F.map(([nm, v], k) => [nm, (ih.w[h[k][0]] || 0) * v]).filter((x) => x[0] !== "bias" && Math.abs(x[1]) > 0.02).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6).map((x) => [x[0], round(x[1], 2)]);
+    const out = { pBig: round(pBig), pAny: round(pAny), mult: mag == null ? null : round(Math.max(0, Math.expm1(mag)), 2), pUp: round(pUp), pRates: round(pRates), pStock: round(pStock), adj: round(adjFrom(pImp, ih.pos, model.active ? model.strength : 0), 2), ok: model.ok || {}, why: contrib };
+    if (opt.assets && H.xa) out.assets = rankAssets(model, H, F, r, opt);
+    return out;
   }
-  return { VERSION, featurize, tokens, lexicon, buildDataset, train, predict, auc, spearman, adjFrom };
+  /* which instruments this headline is likely to move, ranked by lift over each one's normal rate of big moves */
+  function rankAssets(model, H, F, r, opt = {}) {
+    // only instruments with measured history (or the stocks the headline names): unmeasured ones would rank on borrowed features
+    const base = model.assetBase || {}; const known = Object.keys(base).filter((k) => ASSETS[k]);
+    const keys = new Set([...(opt.universe || (known.length ? known : Object.keys(ASSETS))).filter((k) => opt.universe || !known.length || base[k]), ...(r.tk || []).filter((t) => !ASSETS[t] && /^[A-Z][A-Z.]{0,5}$/.test(t))]);
+    const out = [];
+    for (const k of keys) {
+      const cls = assetClass(k); const pf = pairFeatures(F, k, cls, r.title, r.tk); const h = pf.map(([nm, v]) => [hidx(nm, DIMX), v]);
+      const p = scoreHead(H.xa, h); const up = H.xd ? scoreHead(H.xd, h) : null;
+      const b = base[k]?.rate ?? base["$" + cls]?.rate ?? H.xa.pos ?? 0.2;
+      out.push({ k, cls, p: round(p), base: round(b), lift: round(p / Math.max(0.02, b), 2), up: round(up), known: !!base[k] });
+    }
+    return out.sort((a, b) => b.p * Math.min(3, b.lift) - a.p * Math.min(3, a.lift)).slice(0, opt.top || 10);
+  }
+  return { VERSION, ASSETS, CORE, assetClass, featurize, tokens, lexicon, buildDataset, train, predict, auc, spearman, adjFrom };
 });
