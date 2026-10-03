@@ -3,6 +3,7 @@
 <script src="/api/env.js"></script>
 <script src="/runtime.js"></script>
 <script src="/newsmodel.js"></script>
+<script src="/marketmodel.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -355,6 +356,7 @@ button.tk:hover{border-color:var(--accent);color:var(--accent)}
     <button class="tab" role="tab" id="tab-wire" data-tab="wire" aria-selected="true">Wire<span class="count" id="alertCount"></span></button>
     <button class="tab" role="tab" id="tab-brief" data-tab="brief" aria-selected="false">Briefings</button>
     <button class="tab" role="tab" id="tab-ideas" data-tab="ideas" aria-selected="false">Ideas<span class="count" id="ideaCount"></span></button>
+    <button class="tab" role="tab" id="tab-mkt" data-tab="mkt" aria-selected="false">Market model<span class="count" id="mktCount"></span></button>
     <button class="tab" role="tab" id="tab-news" data-tab="news" aria-selected="false">News trades<span class="count" id="newsCount"></span></button>
     <button class="tab" role="tab" id="tab-crypto" data-tab="crypto" aria-selected="false">Crypto<span class="count" id="cxCount"></span></button>
     <button class="tab" role="tab" id="tab-perps" data-tab="perps" aria-selected="false">Perps<span class="count" id="perpCount"></span></button>
@@ -604,6 +606,30 @@ button.tk:hover{border-color:var(--accent);color:var(--accent)}
       </div>
     </section>
 
+    <!-- MARKET MODEL -->
+    <section class="panel" id="panel-mkt" role="tabpanel" aria-labelledby="tab-mkt" hidden>
+      <div class="stack">
+          <div class="card">
+            <header><h2>Market map</h2><div class="row"><span class="note" id="mmNote"></span><select id="mmFilter" aria-label="Asset class"><option value="">All assets</option><option value="index">Index futures</option><option value="rates">Rates</option><option value="fx">FX &amp; dollar</option><option value="commodity">Commodities</option><option value="crypto">Crypto</option><option value="etf">ETFs</option><option value="stock">Stocks</option><option value="vol">Volatility</option></select></div></header>
+            <div class="body note" style="padding-bottom:0">The desk's learned read of every market it prices. One model combines price action and indicators, levels, cross-asset context, news and sentiment, fundamentals and time of day, and forecasts each market's next 1 hour, 4 hours and 1 day in units of its own volatility. ✓ marks forecasts whose asset class and horizon passed walk-forward testing; the others are shown for context only.</div>
+            <div class="body" id="mmMap"></div>
+          </div>
+          <div class="card">
+            <header><h2>Desk candidates</h2><span class="note" id="mmCandNote"></span></header>
+            <div class="body note" style="padding-bottom:0">Trades where the market model, the news model and the desk's own record line up: a trusted forecast agreeing across horizons, news not pointing the other way, and the self-learned odds for this kind of trade. Stops are sized from the market's own volatility. Logged ideas are graded like any other (setup “market model” or “news model”), and those results train the model of the desk's own trades.</div>
+            <div class="body" id="mmCands"></div>
+          </div>
+          <div class="card">
+            <header><h2>What the desk has learned</h2><div class="row"><span class="note" id="mmTrained"></span><button class="btn sm" type="button" data-mm-retrain>Retrain now</button></div></header>
+            <div class="body" id="mmLearned"></div>
+          </div>
+          <div class="card">
+            <header><h2>Learning from its own trades</h2></header>
+            <div class="body" id="mmSelf"></div>
+          </div>
+      </div>
+    </section>
+
     <!-- NEWS TRADES -->
     <section class="panel" id="panel-news" role="tabpanel" aria-labelledby="tab-news" hidden>
       <div class="grid2">
@@ -834,7 +860,7 @@ button.tk:hover{border-color:var(--accent);color:var(--accent)}
             <label>TinyFish news searches/day<input type="number" id="cfgTfSearch" min="0" max="100"></label>
             <label>Tavily searches/day<input type="number" id="cfgTvCap" min="0"></label>
             <label class="check"><input type="checkbox" id="cfgLearn"> Let the news model re-weight importance from what actually moved NQ</label>
-            <label class="check"><input type="checkbox" id="cfgModelIdeas"> Let the news model log its own trade ideas (strong, unpriced pressure only; at most 2 every 20 minutes; graded like any idea under the setup “news model”)</label>
+            <label class="check"><input type="checkbox" id="cfgModelIdeas"> Let the models log their own trade ideas (trusted, agreeing market-model forecasts and strong unpriced news pressure; at most 2 every 20 minutes; graded like any idea, and the results train the desk's model of its own trades)</label>
             <label class="check"><input type="checkbox" id="cfgAutoMem"> Keep memory up to date automatically with AI (post-mortems every 2h, context tree every 4h and the morning deep note on weekdays)</label>
             <label class="wide">Extra news feeds (one per line: Name | URL). The news bus already reads its built-in catalog; anything added here joins it.<textarea id="cfgFeeds" style="min-height:150px;font-family:var(--f-mono);font-size:12px"></textarea></label>
             <label class="wide">Bigdata.com rotating searches (one per line)<textarea id="cfgBdQ"></textarea></label>
@@ -975,7 +1001,7 @@ const SECT_NAME = { XLK: "Tech", XLF: "Financials", XLV: "Health", XLY: "Discret
 const MOVE = { NQ: [0.6, "pct"], ES: [0.5, "pct"], RTY: [0.9, "pct"], VIX: [8, "pct"], US10Y: [0.06, "abs"], US2Y: [0.06, "abs"], DXY: [0.5, "pct"], WTI: [2, "pct"], GOLD: [1.2, "pct"], BTC: [2.2, "pct"] };
 const PAYWALL = /(wsj|barrons|ft|bloomberg|economist|seekingalpha|investors|nytimes|washingtonpost|theinformation)\.com|news\.google\.com/i;
 const NOT_STOCK = new Set(["NQ", "NDX", "SPX", "ES", "MNQ", "MES", "RTY", "YM", "VIX", "DXY", "BTC", "ETH", "SOL", "GOLD", "WTI", "OIL", "US10Y", "US2Y"]);
-const SETUPS = ["opening range break", "VWAP reclaim / rejection", "level fade", "trend pullback", "overnight range", "gap fill", "news momentum", "data release", "macro / rates", "earnings continuation", "analyst action", "breakout + news", "sector rotation", "M&A", "mean reversion", "crypto momentum", "geopolitical", "news model", "other"];
+const SETUPS = ["opening range break", "VWAP reclaim / rejection", "level fade", "trend pullback", "overnight range", "gap fill", "news momentum", "data release", "macro / rates", "earnings continuation", "analyst action", "breakout + news", "sector rotation", "M&A", "mean reversion", "crypto momentum", "geopolitical", "news model", "market model", "other"];
 const CLASSES = ["macro", "fx", "earnings", "analyst", "m&a", "regulatory", "geopolitical", "energy", "crypto", "tech", "market", "company", "general"];
 const KW = [
   [/\b(fed|fomc|powell|warsh|rate[- ]hikes?|rate[- ]cuts?|interest rates?|treasury yields?|bond yields?|central bank)\b/i, "macro", 2.5],
@@ -2519,6 +2545,8 @@ async function trainNewsModel(force) {
   S.newsModel = M;
   await write("memory/newsModel", () => S.db.doc("memory/newsModel").set(M)).catch((e) => console.warn("newsModel", e));
   await trainNewsModel2(force).catch((e) => console.warn("newsModel2", e));
+  await trainMarketModel(force).catch((e) => console.warn("marketModel", e));
+  await trainIdeaModel(force).catch((e) => console.warn("ideaModel", e));
 }
 function learnedAdj(klass, outlet, tk, ev) {
   if (S.config.learn === false) return 0;
@@ -2691,10 +2719,10 @@ async function logModelCandidate(sym) {
 }
 /* optional: the collector logs strong candidates on its own so the model's calls get graded like any idea (setup "news model") */
 async function autoModelIdeas() {
-  if (!S.holder || !S.config.modelIdeas || !S.newsModel2?.active) return;
+  if (!S.holder || !S.config.modelIdeas || !(S.newsModel2?.active || S.marketModel?.heads)) return;
   const now = Date.now(); if (now - (S.runs.modelIdeasT || 0) < 20 * MIN) return; S.runs.modelIdeasT = now;
   const recent = S.runs.modelIdeas || {};
-  for (const t of modelCandidates().filter((t) => t.conf >= 60 && !(recent[t.sym] > now - 4 * HOUR)).slice(0, 2)) { await logTicket(t, t.conf).catch((e) => console.warn("model idea", e)); recent[t.sym] = now; }
+  for (const t of allCandidates().filter((t) => t.conf >= 60 && !(recent[t.sym] > now - 4 * HOUR)).slice(0, 2)) { await logTicket(t, t.conf).catch((e) => console.warn("model idea", e)); recent[t.sym] = now; }
   S.runs.modelIdeas = Object.fromEntries(Object.entries(recent).filter(([, v]) => v > now - DAY));
 }
 /* attribution: for each big market move today, the headline the model most expects to have caused it */
@@ -2725,6 +2753,139 @@ function pressureHTML() {
   return `<div class="md" style="max-width:none"><div class="tbl"><table><tr><th>Market</th><th>Pressure</th><th>Odds</th><th>Lean</th><th>Since</th><th>Status</th><th>Driven by</th><th></th></tr>${list.map((x) => { const c = cands.get(x.k); return `<tr><td><b class="num">${esc(x.k)}</b> <span class="muted">${esc(assetName(x.k) !== x.k ? assetName(x.k) : x.cls)}</span></td><td class="num">${x.score}</td><td class="num">${Math.round(x.maxP * 100)}%</td><td>${Math.abs(x.lean) >= 0.2 ? `<b class="${x.lean > 0 ? "up" : "down"}">${x.lean > 0 ? "↑" : "↓"} ${Math.round(Math.abs(x.lean) * 100)}%</b>` : '<span class="muted">—</span>'}${x.cont != null && M2.ok?.xc ? ` <span class="muted">${esc(contWord(x.cont))}</span>` : ""}</td><td class="num ${x.r ? cls(x.r.mv) : ""}">${x.r?.u != null ? `${x.r.mv > 0 ? "+" : ""}${x.r.mv}${x.r.unit}` : "—"}</td><td style="color:${col(x.priced)};font-weight:600">${esc(x.priced)}</td><td class="note">${x.heads.slice(0, 2).map((h) => esc(h.title.slice(0, 70))).join("<br>")}</td><td>${c ? `<button class="btn sm" type="button" data-model-idea="${esc(x.k)}" title="${esc(ticketText(c))}">Log ${esc(c.dir)}</button>` : ""}</td></tr>`; }).join("")}</table></div></div>
     ${cands.size ? `<p class="note" style="margin:6px 0 0">Model candidates: strong, directional pressure that isn't priced yet (or a first-hour move the model expects to extend). Market entry, stop at 1.6× the instrument's normal hour, target 2R. Logged ideas are marked and graded like any other (setup “news model”), so the desk's record shows whether the model's calls make money.</p>` : ""}${(() => { const r = modelIdeaRecord(); return r.total ? `<p class="note" style="margin:6px 0 0"><b style="color:var(--ink)">Model ideas so far:</b> ${r.total} logged · ${r.live} live · ${r.n} closed${r.n ? ` · ${Math.round(r.win * 100)}% winners · avg <b class="${cls(r.avgR)}">${r2(r.avgR)}R</b>` : ""}</p>` : ""; })()}`;
 }
+
+/* ---------- market model: the desk's learned understanding of every market (public/marketmodel.js) ---------- */
+const MM_LABEL = { m1: "1h momentum", m4: "4h momentum", m24: "1-day momentum", m120: "5-day momentum", ema20: "vs 20h average", ema100: "vs 100h average", trend: "20h/100h trend", rsi: "RSI(14)", bb: "Bollinger", vr: "volatility", lvl_ph: "prior-day high", lvl_pl: "prior-day low", lvl_open: "vs today's open", rng: "today's range", ctx_nq4: "Nasdaq 4h", ctx_nq24: "Nasdaq 1d", ctx_vixchg4: "VIX 4h change", ctx_vixchg24: "VIX 1d change", ctx_y104: "10Y 4h", ctx_y1024: "10Y 1d", ctx_usd4: "dollar 4h", ctx_usd24: "dollar 1d", ctx_btc4: "Bitcoin 4h", vix: "VIX level", news_n: "headlines (3h)", news_imp: "headline importance", tone: "news tone", np: "news pressure", np_dir: "news pressure lean", np_lean: "news lean", cal: "data surprise", mcap: "market cap", sector: "sector", hr: "session", dow: "weekday" };
+const MM_VAL = { vdn: "sharply down", dn: "down", sdn: "slightly down", flat: "flat", sup: "slightly up", up: "up", vup: "sharply up", above: "above", below: "below", at: "at", low: "low", mid: "mid", high: "high", quiet: "quiet", normal: "normal", hot: "hot", pos: "positive", neg: "negative", better: "better than expected", worse: "worse than expected", some: "some", down: "down", us_open: "US open", us_mid: "US midday", us_close: "US close", asia: "Asia", europe: "Europe", evening: "evening" };
+function mmLabel(n) { const [k, v] = n.includes("=") ? [n.slice(0, n.indexOf("=")), n.slice(n.indexOf("=") + 1)] : [n, ""]; return `${MM_LABEL[k] || k}${v ? " " + (MM_VAL[v] || v) : ""}`; }
+const mmCls = (k) => window.TWMarketModel?.classOf(k) || "stock";
+function fundMap() {
+  const out = {}; const x = S.screen || {};
+  for (const v of Object.values(x)) if (Array.isArray(v)) for (const r of v) if (Array.isArray(r) && typeof r[0] === "string" && r[4] != null) out[r[0]] ||= { mcap: +r[4] || null, sector: r[5] ? String(r[5]).slice(0, 24) : null };
+  return out;
+}
+const evCompact = (e) => ({ t: e.t, title: e.title, tk: e.tk || [], imp: e.imp, sent: e.sent, src: e.src, cls: e.cls, outlet: e.outlet, cal: e.cal ? { better: e.cal.better ?? null } : null, pa: e.pa || undefined });
+function trainMarketOffThread(input) {
+  if (typeof Worker === "undefined") return Promise.resolve(TWMarketModel.train(input));
+  return new Promise((resolve, reject) => {
+    const w = new Worker("/marketmodel.js"); const done = (fn) => (x) => { w.terminate(); fn(x); };
+    const timer = setTimeout(done(reject), 15 * MIN, new Error("Training timed out"));
+    w.onmessage = (ev) => { clearTimeout(timer); ev.data.ok ? done(resolve)(ev.data.res) : done(reject)(new Error(ev.data.error)); };
+    w.onerror = (e) => { clearTimeout(timer); done(reject)(new Error(e.message || "Training worker failed")); };
+    w.postMessage({ input });
+  });
+}
+async function trainMarketModel(force) {
+  if (!window.TWMarketModel || !S.db || !S.loaded.mm) return null;
+  const now = Date.now(); if (!force && now - (S.marketModel?.t || 0) < 6 * HOUR) return null;
+  const qs = await S.db.collection("market").get(); const snaps = qs.docs.flatMap((d) => d.data().snaps || []).sort((a, b) => a.t - b.t);
+  const input = { snaps, events: S.events.filter((e) => e.imp >= 4).map(evCompact), newsModel: S.newsModel2?.heads?.xa ? S.newsModel2 : null, fund: fundMap() };
+  const res = await trainMarketOffThread(input); const prev = S.marketModel?.heads ? S.marketModel : null; let doc;
+  if (res.status !== "trained") doc = { ...(prev || {}), status: prev ? prev.status : "warming", t: now, warming: { n: res.n, need: res.need, why: res.why || null }, history: prev?.history || [] };
+  else { const ic4 = res.cells?.[4]?.all?.ic ?? null; doc = { ...res, history: [...(prev?.history || []), { t: res.t, n: res.n, days: res.days, ic1: res.cells?.[1]?.all?.ic ?? null, ic4, ic24: res.cells?.[24]?.all?.ic ?? null, trusted: Object.entries(res.ok || {}).flatMap(([h, o]) => Object.entries(o).filter(([c, v]) => v && c !== "all").map(([c]) => `${c} ${h}h`)) }].slice(-60) }; }
+  S.marketModel = doc; _mo.key = "";
+  await write("memory/marketModel", () => S.db.doc("memory/marketModel").set(doc)).catch((e) => console.warn("marketModel save", e));
+  return doc;
+}
+/* live outlook for every market, refreshed with each snapshot */
+const _mo = { key: "", v: [] };
+function marketOutlook() {
+  const M = S.marketModel; if (!M?.heads || !window.TWMarketModel) return [];
+  const key = `${M.t}|${lastSnap()?.t || 0}|${S.events.length}|${Math.floor(Date.now() / (2 * MIN))}`; if (_mo.key === key) return _mo.v;
+  let v = []; try { const since = Date.now() - 6 * HOUR; v = TWMarketModel.outlook(M, { snaps: S.snaps, events: S.events.filter((e) => e.t >= since && e.imp >= 4).map(evCompact), newsModel: S.newsModel2?.heads?.xa ? S.newsModel2 : null, fund: fundMap() }); } catch (e) { console.warn("outlook", e); }
+  _mo.key = key; _mo.v = v; return v;
+}
+const outlookOf = (T) => marketOutlook().find((o) => o.k === T);
+/* what the models said when an idea was opened: the features the desk's self-model learns from */
+function entryContext(T, dir) {
+  try { const o = outlookOf(T); const np = newsPressure(3).find((x) => x.k === T); return { mm: o ? r2(clamp(o.score * dir, -2, 2)) : null, np: np && Math.abs(np.lean) >= 0.1 ? r2(np.lean * dir) : null, rg: regimeTags() }; } catch (e) { return null; }
+}
+/* self-learning from the desk's own closed ideas */
+async function trainIdeaModel(force) {
+  if (!window.TWMarketModel || !S.db) return null; const now = Date.now(); if (!force && now - (S.ideaModel?.t || 0) < 3 * HOUR) return null;
+  const ideas = stockIdeas().map((i) => ({ t: i.created, setup: i.setup, horizon: i.horizon, dir: i.dir, cls: mmCls(i.ticker), conf: i.conf, src: i.src, ctx: i.ctx || null, r: closedR(i) }));
+  const res = TWMarketModel.trainIdeas(ideas); const doc = { ...res, t: now };
+  S.ideaModel = doc; await write("memory/ideaModel", () => S.db.doc("memory/ideaModel").set(doc)).catch(() => {}); return doc;
+}
+const winP = (x) => (S.ideaModel?.ok ? TWMarketModel.ideaWinP(S.ideaModel, x) : null);
+/* desk candidates: trusted, agreeing market-model forecasts in tradable markets, cross-checked with news and the desk's record */
+function deskCandidates() {
+  const M = S.marketModel; if (!M?.ok) return [];
+  const live = new Set(stockIdeas().filter(isLive).map((i) => String(i.ticker).toUpperCase())); const out = [];
+  for (const o of marketOutlook()) {
+    const T = o.k; if (!TRADABLE(T) || live.has(T) || o.unit !== "%") continue;
+    const h = [24, 4, 1].find((hh) => o.hz[hh]?.ok && o.hz[hh].strong); if (!h || !o.agree) continue;
+    const c = curPrice(T); if (!c || Date.now() - c.t > 30 * MIN) continue;
+    const dir = Math.sign(o.hz[h].z); const np = newsPressure(3).find((x) => x.k === T); if (np && Math.abs(np.lean) >= 0.3 && Math.sign(np.lean) !== dir) continue; // news points the other way
+    const riskPct = Math.max(o.sig * Math.sqrt(h) * 1.3, 0.05); const px = c.p;
+    const stop = px * (1 - (dir * riskPct) / 100), target = px * (1 + (dir * 2 * riskPct) / 100);
+    const pw = winP({ setup: "market model", horizon: h === 24 ? "swing" : "intraday", dir: dir > 0 ? "long" : "short", cls: o.cls, conf: 60, src: "scanner", ctx: { mm: o.score * dir, np: np ? np.lean * dir : null, rg: regimeTags() } });
+    if (pw != null && pw < 0.4) continue; // the desk's own record says this kind of trade loses
+    const conf = Math.round(clamp(45 + 20 * Math.min(1, Math.abs(o.hz[h].z)) + (np && Math.sign(np.lean) === dir ? 8 : 0) + (pw != null ? (pw - 0.5) * 40 : 0), 35, 82));
+    const why = (o.why || []).slice(0, 4).map(([n, v]) => `${mmLabel(n)} (${v > 0 ? "+" : ""}${v})`).join(", ");
+    out.push({ sym: T, dir: dir > 0 ? "long" : "short", type: "market", entry: px, stop: +stop.toPrecision(6), target: +target.toPrecision(6), setup: "market model", src: "model", conf, holdMin: h === 24 ? 1440 : h === 4 ? 240 : 60, validMin: h === 1 ? 15 : 30, horizon: h === 24 ? "swing" : "intraday", h, o, np, pw,
+      trigger: `Market model ${h === 24 ? "1-day" : h + "h"} forecast ${o.hz[h].z > 0 ? "+" : ""}${o.hz[h].z}σ (≈${o.hz[h].move > 0 ? "+" : ""}${o.hz[h].move}%), trusted for ${o.cls} at this horizon, all horizons agree${np && Math.sign(np.lean) === dir ? ", news pressure agrees" : ""}`,
+      why: `Drivers: ${why || "n/a"}.${pw != null ? ` Desk's own record for this kind of trade: ${Math.round(pw * 100)}% win odds.` : ""} Stop ${r2(riskPct)}% (1.3× the ${h}h volatility), target 2R.`,
+      invalidation: `price through ${pxFmt(T, stop)}, or the forecast flipping on the next update`, catalysts: (np?.heads || []).map((x) => x.title.slice(0, 120)), eventTitles: [], analysis: { grade: conf >= 65 ? "A" : "B", note: "market-model candidate", p_win: pw ?? r2(0.5 + 0.1 * Math.min(1, Math.abs(o.hz[h].z))) } });
+  }
+  return out.sort((a, b) => b.conf - a.conf).slice(0, 5);
+}
+function allCandidates() { const a = deskCandidates(); const have = new Set(a.map((x) => x.sym)); return [...a, ...modelCandidates().filter((x) => !have.has(x.sym)).map((x) => ({ ...x, pw: winP({ setup: "news model", horizon: "intraday", dir: x.dir, cls: mmCls(x.sym), conf: x.conf, src: "scanner", ctx: { mm: outlookOf(x.sym) ? outlookOf(x.sym).score * (x.dir === "long" ? 1 : -1) : null, np: Math.abs(x.x?.lean || 0) } }) }))]; }
+async function logDeskCandidate(sym) {
+  const t = allCandidates().find((x) => x.sym === sym); if (!t) { toast(`<b>GONE</b>${esc(sym)} is no longer a candidate`); return; }
+  await logTicket(t, t.conf); S.runs.modelIdeas = { ...(S.runs.modelIdeas || {}), [sym]: Date.now() }; toast(`<b>LOGGED</b>${esc(t.setup)} idea: ${esc(t.dir)} ${esc(sym)}`);
+}
+/* text for every AI that builds context or ideas */
+function marketModelText(filter) {
+  const M = S.marketModel; if (!M?.cells) return M?.warming ? `Market model: warming up (${M.warming.n} of ${M.warming.need} instrument-hours of price history${M.warming.why ? `; ${M.warming.why}` : ""}).` : "Market model: not trained yet.";
+  const cl = (h, c) => M.cells[h]?.cls?.[c]; const trusted = Object.entries(M.ok || {}).flatMap(([h, o]) => Object.entries(o).filter(([c, v]) => v && c !== "all").map(([c]) => `${c} ${h}h (IC ${cl(h, c)?.ic}, backtest ${cl(h, c)?.avg}σ/trade, t ${cl(h, c)?.t})`));
+  const imp = M.imp?.[4]?.cls || {}; const fam = Object.entries(imp).map(([c, f]) => `${c}: ${Object.entries(f).filter(([, v]) => v > 0.005).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(", ") || "nothing stands out"}`).join("; ");
+  const trustedCls = (c) => [1, 4, 24].some((h) => M.ok?.[h]?.[c]);
+  const rules = Object.entries(M.rules?.[4] || {}).filter(([c]) => trustedCls(c)).map(([c, r]) => `${c}: bullish when ${r.bull.filter((x) => !["time", "identity"].includes(x[2])).slice(0, 4).map((x) => mmLabel(x[0])).join(", ") || "?"}; bearish when ${r.bear.filter((x) => !["time", "identity"].includes(x[2])).slice(0, 4).map((x) => mmLabel(x[0])).join(", ") || "?"}`).join(" | ");
+  const ol = marketOutlook().filter((o) => !filter || filter(o)).slice(0, 18).map((o) => `${o.k} (${o.cls}) ${Object.entries(o.hz).map(([h, x]) => `${h}h ${x.z > 0 ? "+" : ""}${x.z}σ${x.ok ? "✓" : ""}`).join(" ")}${o.agree ? " [horizons agree]" : ""}; drivers: ${(o.why || []).slice(0, 3).map(([n, v]) => `${mmLabel(n)} ${v > 0 ? "+" : ""}${v}`).join(", ")}`).join("\n");
+  const me = S.ideaModel?.tables; const self = me ? ` Desk's own trades: ${Object.entries(me.marketModel || {}).map(([k, v]) => `with the market model ${k}: ${v.n} closed, ${Math.round(v.win * 100)}% won, ${v.avgR}R`).join("; ") || "no tagged trades yet"}${S.ideaModel.ok ? `; self-model AUC ${S.ideaModel.auc}, helps: ${S.ideaModel.helps.map((x) => x[0]).join(", ")}, hurts: ${S.ideaModel.hurts.map((x) => x[0]).join(", ")}` : ""}.` : "";
+  return `Market model (trained ${new Date(M.t).toISOString().slice(0, 16)}Z on ${M.n} instrument-hours over ${M.days} days, ${M.instruments} markets; walk-forward with a purge gap). Trusted forecasts (✓): ${trusted.join("; ") || "none yet: treat every forecast as context only"}. What carries signal at 4h (IC lost without it): ${fam || "n/a"}. Learned rules (4h, trusted classes only): ${rules || "none trusted yet"}.${self}\nOUTLOOK NOW (forecast forward return in units of each market's volatility):\n${ol || "no live prices"}`;
+}
+const candTextAll = () => allCandidates().map((t) => `- ${t.dir.toUpperCase()} ${t.sym} [${t.setup}] @ ${pxFmt(t.sym, t.entry)}, stop ${pxFmt(t.sym, t.stop)}, target ${pxFmt(t.sym, t.target)}, hold ${t.holdMin}m, conf ${t.conf}${t.pw != null ? `, desk win odds ${Math.round(t.pw * 100)}%` : ""}: ${t.trigger}. ${t.why}`).join("\n");
+
+/* ----- market model tab ----- */
+function paintMarketModel() {
+  const M = S.marketModel; const pc = (v) => (v == null ? "—" : Math.round(v * 100) + "%"); const f2 = (v) => (v == null ? "—" : (+v).toFixed(2));
+  const filt = $("#mmFilter").value; const ol = marketOutlook().filter((o) => !filt || o.cls === filt || (filt === "etf" && ["etf", "credit"].includes(o.cls)));
+  $("#mmNote").textContent = ol.length ? `${ol.length} markets` : "";
+  const arrow = (x) => (x ? `<span class="${x.z > 0 ? "up" : x.z < 0 ? "down" : ""}" title="${esc(`${x.z > 0 ? "+" : ""}${x.z}σ ≈ ${x.move > 0 ? "+" : ""}${x.move}; P(up) ${pc(x.p)}${x.ok ? "; trusted" : "; context only"}`)}">${Math.abs(x.z) < 0.1 ? "·" : x.z > 0 ? (x.z >= 0.5 ? "▲▲" : "▲") : x.z <= -0.5 ? "▼▼" : "▼"} ${f2(x.z)}${x.ok ? "✓" : ""}</span>` : '<span class="muted">—</span>');
+  $("#mmMap").innerHTML = !M?.heads ? `<p class="note" style="margin:0">${M?.warming ? `Warming up: ${M.warming.n} of ${M.warming.need} instrument-hours of price history${M.warming.why ? ` (${esc(M.warming.why)})` : ""}. Prices are recorded every few minutes while Tapewire runs; the model trains itself every 6 hours.` : "Not trained yet. It trains itself every 6 hours from the stored price history, or press Retrain now."}</p>`
+    : !ol.length ? `<p class="note" style="margin:0">No fresh prices in this class.</p>`
+    : `<div class="md" style="max-width:none"><div class="tbl"><table><tr><th>Market</th><th>Price</th><th>1h</th><th>4h</th><th>1 day</th><th>Read</th><th>Drivers</th></tr>${ol.slice(0, 40).map((o) => `<tr><td><b class="num">${esc(o.k)}</b> <span class="muted">${esc(o.cls)}</span></td><td class="num">${esc(pxFmt(o.k, o.p))}</td><td class="num">${arrow(o.hz[1])}</td><td class="num">${arrow(o.hz[4])}</td><td class="num">${arrow(o.hz[24])}</td><td>${Math.abs(o.score) < 0.15 ? '<span class="muted">neutral</span>' : `<b class="${o.score > 0 ? "up" : "down"}">${o.score > 0 ? "bullish" : "bearish"}</b>${o.agree ? ' <span class="chip good">agree</span>' : ""}`}</td><td class="note">${(o.why || []).slice(0, 3).map(([n, v]) => `<span class="${v > 0 ? "up" : "down"}">${esc(mmLabel(n))}</span>`).join(" · ")}</td></tr>`).join("")}</table></div></div>`;
+  const cands = allCandidates(); $("#mmCandNote").textContent = cands.length ? `${cands.length} now` : "";
+  $("#mmCands").innerHTML = cands.length ? cands.map((t) => `<div style="border-top:1px solid var(--line-2);padding:8px 0"><div class="row"><b class="num">${esc(t.sym)}</b><span class="dir ${t.dir === "short" ? "short" : "long"}">${esc(t.dir)}</span><span class="chip">${esc(t.setup)}</span><span class="chip">conf ${t.conf}</span>${t.pw != null ? `<span class="chip ${t.pw >= 0.5 ? "good" : ""}">desk odds ${pc(t.pw)}</span>` : ""}<button class="btn sm" type="button" data-desk-idea="${esc(t.sym)}">Log idea</button></div><div class="mono note" style="margin-top:3px">${esc(ticketText(t))}</div><div style="margin-top:3px"><b>${esc(t.trigger)}</b>. ${esc(t.why)}</div></div>`).join("") : `<p class="note" style="margin:0">${M?.heads ? "Nothing lines up right now. A candidate needs a trusted forecast that agrees across horizons in a tradable market, no opposing news pressure, and acceptable odds from the desk's own record." : "Candidates appear once the market model has trained."}</p>`;
+  // learned
+  $("#mmTrained").textContent = M?.t ? `trained ${ago(M.t)}${M.n ? ` · ${M.n.toLocaleString()} instrument-hours · ${M.days} days` : ""}` : "";
+  const rb = document.querySelector("[data-mm-retrain]"); if (rb) { rb.disabled = !!S.mmBusy; rb.textContent = S.mmBusy ? "Training…" : "Retrain now"; }
+  if (!M?.cells) { $("#mmLearned").innerHTML = `<p class="note" style="margin:0">Nothing learned yet.</p>`; }
+  else {
+    const NAME = { index: "Index futures", vol: "Volatility", rates: "Rates", fx: "FX & dollar", commodity: "Commodities", crypto: "Crypto", etf: "ETFs", credit: "Credit", stock: "Stocks" };
+    const classes = [...new Set(Object.values(M.cells).flatMap((c) => Object.keys(c.cls || {})))];
+    const cell = (h, c) => { const x = M.cells[h]?.cls?.[c]; if (!x) return "<td class='muted'>—</td>"; const ok = M.ok?.[h]?.[c]; return `<td class="num" title="${esc(`IC ${x.ic} · direction ${pc(x.dirAcc)} vs ${pc(x.dirBase)} · AUC ${x.auc} · backtest ${x.trades} trades, ${x.avg}σ avg after costs, hit ${pc(x.hit)}, t ${x.t}`)}"><b class="${ok ? "up" : (x.ic ?? 0) > 0 ? "" : "down"}">${f2(x.ic)}</b>${ok ? " ✓" : ""}<div class="muted" style="font-size:11px">${x.avg != null ? `${x.avg > 0 ? "+" : ""}${x.avg}σ · t ${x.t}` : ""}</div></td>`; };
+    const skill = `<p class="note" style="margin:0 0 6px">Skill on unseen data, per asset class and horizon: information coefficient (rank correlation of forecast vs outcome; 0 = none, 0.05+ is useful at these horizons) and the cost-adjusted result per trade of following the signal. ✓ = trusted (IC ≥ 0.03, positive backtest with t ≥ 1.5 over 150+ cases).</p><div class="md"><div class="tbl"><table><tr><th>Asset class</th><th>1h</th><th>4h</th><th>1 day</th></tr>${classes.map((c) => `<tr><td>${esc(NAME[c] || c)}</td>${cell(1, c)}${cell(4, c)}${cell(24, c)}</tr>`).join("")}</table></div></div>`;
+    const imp = M.imp?.[4]?.cls || {}; const fams = ["price", "levels", "context", "news", "fundamentals", "time"];
+    const impH = Object.keys(imp).length ? `<div class="note" style="margin:10px 0 4px">What carries the signal at 4h (forecast skill lost when each family is switched off)</div><div class="md"><div class="tbl"><table><tr><th></th>${fams.map((f) => `<th>${esc(f)}</th>`).join("")}</tr>${Object.entries(imp).map(([c, f]) => { const mx = Math.max(0.001, ...fams.map((k) => f[k] || 0)); return `<tr><td>${esc(NAME[c] || c)}</td>${fams.map((k) => `<td class="num">${(f[k] || 0) > 0.003 ? `<span style="display:inline-block;height:8px;width:${Math.round(((f[k] || 0) / mx) * 40)}px;background:var(--s1);border-radius:2px"></span> ${f2(f[k])}` : '<span class="muted">·</span>'}</td>`).join("")}</tr>`; }).join("")}</table></div></div>` : "";
+    const rules = Object.entries(M.rules?.[4] || {}).filter(([c]) => [1, 4, 24].some((h) => M.ok?.[h]?.[c])).map(([c, r]) => { const ok = (x) => !["time", "identity"].includes(x[2]); const b = r.bull.filter(ok).slice(0, 5), d = r.bear.filter(ok).slice(0, 5); return b.length || d.length ? `<div style="margin:6px 0"><b>${esc(NAME[c] || c)}</b>${(() => { const hs = [1, 4, 24].filter((h) => M.ok?.[h]?.[c]); return hs.length ? ` <span class="chip good">trusted ${hs.map((h) => (h === 24 ? "1d" : h + "h")).join(", ")}</span>` : ' <span class="chip">learning</span>'; })()}<div class="note">bullish: ${b.map((x) => `<span class="tk">${esc(mmLabel(x[0]))}</span>`).join(" ") || "—"}</div><div class="note">bearish: ${d.map((x) => `<span class="tk">${esc(mmLabel(x[0]))}</span>`).join(" ") || "—"}</div></div>` : ""; }).join("");
+    const hist = (M.history || []).slice(-6).reverse(); const hh = hist.length ? `<div class="md" style="margin-top:8px"><div class="tbl"><table><tr><th>Trained</th><th>Rows</th><th>Days</th><th>IC 1h</th><th>IC 4h</th><th>IC 1d</th><th>Trusted</th></tr>${hist.map((h) => `<tr><td>${esc(new Date(h.t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${h.n}</td><td>${h.days}</td><td>${f2(h.ic1)}</td><td>${f2(h.ic4)}</td><td>${f2(h.ic24)}</td><td class="note">${esc((h.trusted || []).join(", ") || "none")}</td></tr>`).join("")}</table></div></div>` : "";
+    $("#mmLearned").innerHTML = skill + impH + (rules ? `<div class="note" style="margin:10px 0 2px">Learned rules for asset classes with trusted forecasts (4h weights; time of day aside). Classes still learning are hidden so noise isn't read as insight.</div>${rules}` : `<p class="note" style="margin:10px 0 0">Learned rules appear for an asset class once its forecasts pass testing.</p>`) + hh;
+  }
+  const I = S.ideaModel; const tb = (title, o) => { const e = Object.entries(o || {}); return e.length ? `<div class="note" style="margin:8px 0 2px">${esc(title)}</div><div class="md"><div class="tbl"><table><tr><th></th><th>Closed</th><th>Won</th><th>Avg R</th></tr>${e.sort((a, b) => b[1].n - a[1].n).slice(0, 8).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.n}</td><td>${pc(v.win)}</td><td class="${cls(v.avgR)}">${v.avgR}</td></tr>`).join("")}</table></div></div>` : ""; };
+  $("#mmSelf").innerHTML = !I ? `<p class="note" style="margin:0">Every idea now records what the market and news models said when it was opened. As ideas close, the desk learns which kinds of trade work for it: by setup, asset class and horizon, and whether trading with or against the models pays.</p>`
+    : `<p class="note" style="margin:0">${I.status === "trained" ? `Self-model trained on ${I.n} closed ideas${I.auc != null ? `, AUC ${f2(I.auc)} on the most recent 30%` : ""}${I.ok ? " · <b>used</b> to score candidates" : " · not used until its AUC reaches 0.58"}.${I.helps?.length ? ` Helps: ${I.helps.slice(0, 4).map((x) => esc(x[0])).join(", ")}. Hurts: ${I.hurts.slice(0, 4).map((x) => esc(x[0])).join(", ")}.` : ""}` : `Warming up: ${I.n} of ${I.need} closed ideas. The tables fill in as ideas close.`}</p>${tb("Trades with or against the market model at entry", I.tables?.marketModel)}${tb("With or against news pressure", I.tables?.news)}${tb("By asset class", I.tables?.cls)}${tb("By setup", I.tables?.setup)}`;
+}
+$("#mmFilter").addEventListener("change", () => paint());
+document.addEventListener("click", async (ev) => {
+  const d = ev.target.closest("[data-desk-idea]"); if (d) { d.disabled = true; try { await logDeskCandidate(d.dataset.deskIdea); } catch (e) { toast(`<b>ERROR</b>${esc(e.message || e)}`); } paint(); return; }
+  const r = ev.target.closest("[data-mm-retrain]"); if (!r || S.mmBusy) return;
+  S.mmBusy = true; paint();
+  try { const m = await trainMarketModel(true); await trainIdeaModel(true); toast(`<b>MARKET MODEL</b>${m?.cells ? `Trained on ${m.n.toLocaleString()} instrument-hours across ${m.instruments} markets` : `Warming up: ${m?.warming?.n ?? 0} of ${m?.warming?.need ?? 400} instrument-hours`}`); }
+  catch (e) { toast(`<b>MARKET MODEL</b>${esc(e.message || "Training failed")}`); } finally { S.mmBusy = false; paint(); }
+});
 function newsModelText() {
   const M = S.newsModel; if (!M?.n) return `${model2Text()} Category weights: not trained yet (needs measured Nasdaq reactions).`;
   const cls = Object.entries(M.cls || {}).filter(([, v]) => v.n >= 5).sort((a, b) => b[1].m - a[1].m).map(([k, v]) => `${k} ${v.m}× (n${v.n}, avg |NQ 1h| ${v.abs}%)`).join(", ");
@@ -4053,7 +4214,7 @@ async function createIdea(spec, source) {
     hold: spec.holdMin ? clamp(spec.holdMin, 5, hz.hold / MIN) * MIN : null, validUntil: null,
     beAtR: Number.isFinite(spec.beAtR) && spec.beAtR > 0 ? spec.beAtR : null, qty: Number.isFinite(spec.qty) && spec.qty > 0 ? spec.qty : null, taken: !!spec.taken,
     ...mgmtPlan(source === "you" ? { ...spec, mgmtExplicit: true } : spec, horizon),
-    eventIds: (spec.eventIds || []).slice(0, 6), ref: spec.ref ?? null
+    eventIds: (spec.eventIds || []).slice(0, 6), ref: spec.ref ?? null, ctx: spec.at ? null : entryContext(T, dir)
   };
   if (spec.analysis) idea.analysis = spec.analysis;
   if (Number.isFinite(spec.order) && Number.isFinite(spec.ref) && spec.ref) idea.gapPct = r2((Math.abs(spec.order - spec.ref) / spec.ref) * 100);
@@ -6383,7 +6544,8 @@ function ideaSections(o, extra = {}) {
     { k: "Morning deep note", p: 1, min: 3000, t: deepFresh() ? deepText() : "" },
     { k: "Catalyst board", p: 1, min: 2500, h: "CATALYST BOARD (fresh market-moving stories; reaction since the first headline as a multiple of a normal day's move):", t: catalystsText(8) },
     { k: "News pressure", p: 1, min: 1500, h: "NEWS PRESSURE (the trained news model's expectation per market from the last 3h of stories, net of what already happened; validated walk-forward, see the news model section for its record):", t: pressureText(3) },
-    { k: "Model candidates", p: 1, min: 1200, h: "NEWS-MODEL TRADE CANDIDATES (mechanical; take one only if the drivers, levels and calendar agree, improve its levels, or say why not):", t: candText() },
+    { k: "Market model", p: 1, min: 3000, h: "MARKET MODEL (the desk's learned, walk-forward-validated read of every market: price action, indicators, levels, cross-asset context, news, sentiment and fundamentals combined; only ✓ forecasts are trusted):", t: marketModelText() },
+    { k: "Model candidates", p: 1, min: 1200, h: "MODEL TRADE CANDIDATES (mechanical, from the market and news models and the desk's own record; take one only if the drivers, levels and calendar agree, improve its levels, or say why not):", t: candTextAll() },
     { k: "Move attribution", p: 2, h: "WHAT DROVE TODAY'S BIG MOVES (model attribution):", t: attributionText(24) },
     { k: "Live ideas", p: 1, min: 1500, h: "LIVE IDEAS (don't duplicate; don't contradict without saying why):", t: live.map((i) => `- ${i.ticker} ${i.dir} ${i.horizon} ${i.status}${i.status === "working" ? ` ${i.entryType} @ ${i.order}` : ` entry ${fmtN(i.entry, 2)}`} stop ${fmtN(i.stop, 2)} target ${fmtN(i.target, 2)} now ${i.r ?? 0}R${i.taken ? " (Jake is in this trade)" : ""}`).join("\n") || "none" },
     { k: "Track record", p: 1, min: 1500, h: "YOUR TRACK RECORD (graded in R):", t: deskStatsText() },
@@ -6422,6 +6584,7 @@ function fxSections(o, extra = {}) {
     { k: "Setup scanner", p: 1, min: 3000, h: "SETUP SCANNER (deterministic, from the levels below; start here, but only take a setup when the drivers and news back it):", t: setups.join("\n") || "no setups flagged right now" },
     { k: "Levels ladders", p: 1, min: 6000, h: "LEVELS LADDERS (pips from price; ADR = average daily range, 20 days; sessions in ET):", t: ladders.join("\n") },
     { k: "News pressure", p: 1, min: 1000, h: "NEWS PRESSURE on FX and the dollar (trained news model, last 3h, net of what already happened):", t: newsPressure(3).filter((x) => x.cls === "fx").length ? pressureText(3).split("\n").filter((l) => /^- (DXY|[A-Z]{6}) \(fx\)/.test(l)).join("\n") : "" },
+    { k: "Market model", p: 1, min: 1200, h: "MARKET MODEL on FX, the dollar and rates (learned, walk-forward validated; ✓ = trusted):", t: marketModelText((o) => ["fx", "rates"].includes(o.cls)) },
     { k: "Cross-asset", p: 1, min: 1500, h: "CROSS-ASSET and what each pair trades with (20-day correlation of daily moves; yields in bp):", t: `${xa}\n${corr}` },
     { k: "Option expiries", p: 1, t: `OPTION EXPIRIES (10am NY cut today): ${exp}` },
     { k: "FX catalyst board", p: 1, min: 1500, h: "FX CATALYST BOARD (fresh stories touching FX, with the reaction since the first headline):", t: catalystsText(10, true) },
@@ -6477,6 +6640,7 @@ Reply with only JSON: {"read":"2-3 sentences: what the tape is trading on","driv
         { k: "Themes", p: 3, h: "RUNNING THEMES:", t: themesText() },
         { k: "Entities", p: 3, t: `ENTITIES SPIKING IN THE NEWS TODAY: ${entitiesText(20)}` },
         { k: "News pressure", p: 1, min: 1500, h: "NEWS PRESSURE (trained model, per market, last 3h of stories, net of what already happened):", t: pressureText(3) },
+        { k: "Market model", p: 2, min: 1500, h: "MARKET MODEL (learned read of every market from price, levels, context, news and fundamentals):", t: marketModelText() },
         { k: "Move attribution", p: 2, h: "WHAT DROVE TODAY'S BIG MOVES (model attribution):", t: attributionText(24) },
         { k: "News model", p: 2, t: `NEWS MODEL (learned from the library's own measured reactions: which categories and outlets move NQ, who reports first): ${newsModelText()}` },
         { k: "FX news tone", p: side === "corp" ? 5 : 3, t: `FX news tone by currency, 24h: ${JSON.stringify(fxTone())}` },
@@ -7018,6 +7182,7 @@ const ASK_TOOLS = [
   { name: "get_entities", description: "Mention counts per day (up to 45 days) for tickers and macro actors (Fed, Powell, Iran, OPEC, Trump, tariffs, oil, AI, chips…), with today's surge versus the 7-day pace, average importance and tone. Pass names to look up specific ones; otherwise returns the most active.", inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } } } },
     execute: (i) => { const E = S.entities?.e || {}; if (Array.isArray(i.names) && i.names.length) return Object.fromEntries(i.names.map((n) => { const k = Object.keys(E).find((x) => x.toLowerCase() === String(n).toLowerCase()); return [n, k ? E[k] : null]; })); const today = dayKey(Date.now()); return Object.entries(E).sort((a, b) => (b[1].d[today] || 0) - (a[1].d[today] || 0)).slice(0, 30).map(([k, x]) => ({ name: k, today: x.d[today] || 0, surge: x.sg, total_45d: x.n, tone: x.s, last_headline: x.lt })); } },
   { name: "get_social", description: "Social and tape pulse: StockTwits trending symbols with their why-it's-trending summaries, most-discussed tickers and top posts on r/wallstreetbets and r/stocks, and today's Nasdaq trading halts (including repeated volatility halts, a momentum signal).", execute: () => S.social || {} },
+  { name: "get_market_model", description: "The desk's learned understanding of the market: a model trained on its own stored history that combines price action, indicators (momentum, EMAs, RSI, Bollinger, volatility), levels (prior-day high/low, today's open, range), cross-asset context (Nasdaq, VIX, yields, dollar), news and sentiment, and fundamentals. Returns its skill per asset class and horizon, what carries signal, its learned rules, the live 1h/4h/1-day outlook for every market, combined trade candidates, and what the desk has learned from its own closed trades.", inputSchema: { type: "object", properties: { symbol: { type: "string", description: "Optional: one market, e.g. NQ, EURUSD, WTI, BTC, NVDA" } } }, execute: (i) => { const T = String(i?.symbol || "").toUpperCase().replace("/", ""); const M = S.marketModel; return { summary: marketModelText(), outlook: marketOutlook().filter((o) => !T || o.k === T).slice(0, T ? 1 : 30).map((o) => ({ k: o.k, cls: o.cls, price: o.p, horizons: o.hz, score: o.score, agree: o.agree, drivers: (o.why || []).map(([n, v]) => [mmLabel(n), v]), families: o.fam, state: (o.feat || []).map(mmLabel) })), skill: M?.cells || null, trusted: M?.ok || null, importance: M?.imp || null, candidates: allCandidates().map((t) => ({ ticket: ticketText(t), setup: t.setup, conf: t.conf, desk_win_odds: t.pw ?? null, why: `${t.trigger}. ${t.why}` })), own_trades: S.ideaModel || null }; } },
   { name: "get_news_pressure", description: "The trained news model's live read: which markets (futures, yields, FX, commodities, crypto, sectors, named stocks) the last few hours of stories should move and which way, whether each has priced it yet, the model's mechanical trade candidates, and which headline most likely drove each big move today.", inputSchema: { type: "object", properties: { hours: { type: "number", description: "Look-back for stories, 1-12 (default 3)" } } }, execute: (i) => { const h = clamp(+i?.hours || 3, 1, 12); return { pressure: newsPressure(h).map((x) => ({ ...x, r: x.r ? { mv: x.r.mv, unit: x.r.unit, x_normal_day: x.r.u } : null })), candidates: modelCandidates(h).map((t) => ({ ticket: ticketText(t), conf: t.conf, why: t.why })), attribution: attributeMoves(24), model_ok: S.newsModel2?.ok || null, live: S.newsModel2?.live?.x || null }; } },
   { name: "get_news_model", description: "What Tapewire has learned from its own measurements: which news categories and outlets move the Nasdaq most (weights vs baseline), which outlets report first and how often their scoops get confirmed, and which feeds produce the most important headlines.", execute: () => ({ trained_model: S.newsModel2?.metrics ? { trained: new Date(S.newsModel2.t).toISOString(), samples: S.newsModel2.n, applied: !!S.newsModel2.active, validation: S.newsModel2.metrics, heads_ok: S.newsModel2.ok, importance_head: S.newsModel2.impHead, top_features: S.newsModel2.top, cross_asset: { what_moves_each_market: S.newsModel2.xtop, base_rates_and_normal_hour: S.newsModel2.assetBase, by_class: S.newsModel2.metrics?.xClass, continuation: { acc: S.newsModel2.metrics?.xcAcc, base: S.newsModel2.metrics?.xcBase, auc: S.newsModel2.metrics?.xcAuc, trusted: !!S.newsModel2.ok?.xc }, live: S.newsModel2.live?.x || null }, cross_asset_text: crossText(), suggested_alert_threshold: S.newsModel2.threshold, history: (S.newsModel2.history || []).slice(-10) } : S.newsModel2?.warming || null, model: S.newsModel ? { ...S.newsModel, seen: undefined } : null, feeds: Object.fromEntries(Object.entries(S.nb?.f || {}).map(([k, v]) => [k, { value: v.v, new_total: v.tot, important: v.hi, alerts: v.al, last: v.t ? new Date(v.t).toISOString() : null, err: v.err || null }])) }) },
   { name: "get_weekly_memory", description: "Weekly rollups: NQ, VIX and bitcoin change for the week, dominant story threads, most-mentioned names, data releases and biggest reactions. Up to 12 weeks.", inputSchema: { type: "object", properties: { weeks: { type: "number" } } }, execute: (i) => (S.weeks || []).slice(0, clamp(+i.weeks || 4, 1, 12)) },
@@ -7098,7 +7263,7 @@ function subscribe() {
   db.doc("system/calendar").onSnapshot((s) => { if (s.exists) S.calendar = s.data(); paint(); }, onErr("calendar"));
   db.doc("memory/lessons").onSnapshot((s) => { S.lessons = s.exists ? s.data() : { items: [], reviews: [] }; paint(); }, onErr("lessons"));
   db.collection("days").orderBy("day", "desc").limit(45).onSnapshot((qs) => { S.buckets = qs.docs.map((d) => ({ id: d.id, ...d.data() })); S.bucketsLoaded = true; rebuildEvents(); }, onErr("days"));
-  db.collection("market").orderBy("day", "desc").limit(3).onSnapshot((qs) => {
+  db.collection("market").orderBy("day", "desc").limit(8).onSnapshot((qs) => {
     S.mdocs = qs.docs.map((d) => d.data());
     S.snaps = S.mdocs.slice().reverse().flatMap((d) => d.snaps || []).sort((a, b) => a.t - b.t);
     S.snapsLoaded = true; paint();
@@ -7129,6 +7294,8 @@ function subscribe() {
   db.doc("system/social").onSnapshot((s) => { S.loaded.social = 1; if (s.exists && (!S.holder || !S.social?.t || s.data().t > S.social.t)) S.social = structuredClone(s.data()); paint(); }, onErr("social"));
   db.doc("memory/threads").onSnapshot((s) => { S.loaded.threads = 1; if (s.exists && (!S.threads || s.data().t >= S.threads.t)) S.threads = structuredClone(s.data()); paint(); }, onErr("threads"));
   db.doc("memory/entities").onSnapshot((s) => { S.loaded.entities = 1; if (s.exists && (!S.entities || s.data().t >= S.entities.t)) S.entities = structuredClone(s.data()); paint(); }, onErr("entities"));
+  db.doc("memory/marketModel").onSnapshot((s) => { S.loaded.mm = 1; if (s.exists && (!S.marketModel || s.data().t >= S.marketModel.t)) { S.marketModel = s.data(); _mo.key = ""; } paint(); }, onErr("marketModel"));
+  db.doc("memory/ideaModel").onSnapshot((s) => { if (s.exists) S.ideaModel = s.data(); paint(); }, onErr("ideaModel"));
   db.doc("memory/newsModel2").onSnapshot((s) => { S.loaded.model2 = 1; if (s.exists && (!S.newsModel2 || s.data().t >= S.newsModel2.t)) { const had = S.newsModel2?.t; S.newsModel2 = s.data(); if (had !== S.newsModel2.t && S.bucketsLoaded) rebuildEvents(); } paint(); }, onErr("newsModel2"));
   db.doc("memory/newsModel").onSnapshot((s) => { S.loaded.model = 1; const had = S.newsModel?.t; if (s.exists && (!had || s.data().t >= had)) { S.newsModel = structuredClone(s.data()); if (had !== S.newsModel.t && S.bucketsLoaded) rebuildEvents(); } paint(); }, onErr("newsModel"));
   db.doc("system/fx").onSnapshot((s) => { S.loaded.fx = 1; if (s.exists && (!S.holder || !S.fx || (s.data().t || 0) > (S.fx.t || 0))) { const keep = { bars: S.fx?.bars || {}, daily: S.fx?.daily || {}, b5: S.fx?.b5 || {}, dcl: S.fx?.dcl || {}, xcl: S.fx?.xcl || {}, ohlc: S.fx?.ohlc || {} }; S.fx = { ...structuredClone(s.data()), ...keep }; } else if (!S.fx) S.fx = { q: {}, daily: {}, bars: {} }; paint(); }, onErr("fx"));
@@ -7204,6 +7371,7 @@ function render() {
   if (S.tab === "sec") paintSec();
   if (S.tab === "fx") { paintFx(); paintFx2(); }
   if (S.tab === "news") paintNews();
+  if (S.tab === "mkt") paintMarketModel();
   if (S.ticket && !$("#ticketDrawer").hidden && !S.ticketAI?.busy && !$("#ticketDrawer").contains(document.activeElement)) paintTicket();
   const catN = catalysts(3).filter((c) => Object.values(c.react).some((r) => r.st === "not priced yet") || c.score >= S.config.alertThreshold).length; $("#newsCount").textContent = catN ? catN : "";
   const fxN = Object.values(S.fx?.sig || {}).filter((x) => Math.abs(x.score) >= 45).length; $("#fxCount").textContent = fxN ? fxN : "";

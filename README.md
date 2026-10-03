@@ -123,6 +123,38 @@ An instrument is measured only while its market trades, and only from prices tha
 - **Context everywhere:** pressure, candidates, attribution and the model read on each catalyst (which markets should move, and whether they have) all feed the PM, the red team, the huddle's news analysts, the FX desk and the briefing. Ask the desk gets a `get_news_pressure` tool. Past analogs now show each analog's biggest cross-asset movers, not just NQ.
 - It retrains every 3 hours (or press **Retrain now**). Ask the desk, briefings and the idea generator read its findings. It needs about 80 measured headlines before it starts.
 
+## The market model: the desk's understanding of the whole market
+
+The **Market model** tab holds one model over every market the desk prices: index futures, VIX, Treasury yields, the dollar and FX pairs, oil, gold and other commodities, crypto, ETFs and the stocks on the watchlist. It learns from Tapewire's own stored price history (`public/marketmodel.js`, trained in a background worker every 6 hours or on **Retrain now**).
+
+For each market and each hour it combines:
+
+| Family | What it sees |
+|---|---|
+| Price action and indicators | momentum over 1h, 4h, 1 day and 5 days in units of the market's own volatility; distance from the 20h and 100h EMAs and their trend; RSI(14); Bollinger %b; volatility regime |
+| Levels | prior-day high and low, today's open, position in today's range, and breaks of them |
+| Cross-asset context | Nasdaq, VIX, 10-year yield, dollar and Bitcoin momentum; VIX level |
+| News and sentiment | headlines mentioning the market (count, tone, importance), the news model's pressure and lean on it, data surprises |
+| Fundamentals | market-cap tier and sector for stocks |
+| Time | session and weekday |
+
+Interactions per asset class and per instrument let it learn different behaviour in different markets, for example momentum persisting in crypto while stretched index futures mean-revert.
+
+- **Forecasts:** each market's forward return over 1 hour, 4 hours and 1 day, in units of its volatility (direction and size).
+- **Validation:** walk-forward with a purge gap, so no training label overlaps the test window. Per asset class and horizon it reports:
+  - the information coefficient (rank correlation of forecast and outcome);
+  - direction accuracy against the usual side;
+  - a cost-adjusted backtest of trading its stronger calls, with a t-statistic.
+
+  Only (class, horizon) cells that pass are **trusted** (✓). Everything else is shown as context only.
+- **What it has learned:** which families carry the signal in each asset class (measured as the forecast skill lost when a family is switched off on unseen data), and its learned bullish and bearish conditions. These are shown only for classes whose forecasts are trusted.
+- **Market map:** the live 1h, 4h and 1-day outlook for every market, with its drivers.
+- **Desk candidates:** a trusted forecast that agrees across horizons in a tradable market, with no opposing news pressure and acceptable odds from the desk's own record. Each becomes a ticket with stops sized from the market's volatility and a 2R target. Strong news-model candidates are listed alongside.
+- **Learning from its own trades:** every idea records what the market and news models said when it was opened. As ideas close, a self-model learns which kinds of trade work for this desk (setup, asset class, horizon, and trading with or against the models). Once it validates, it scores and filters candidates.
+- **Context everywhere:** the market model's skill, rules, outlook and candidates feed the PM and red team, the huddle, the FX desk and Ask the desk (`get_market_model`). The setting that lets the models log their own ideas covers both models.
+
+`node server/markettest.js` checks it on synthetic markets with known structure: momentum, mean reversion, a news-driven drift, and pure noise that must not be trusted.
+
 ## Files
 
 ```
@@ -135,6 +167,7 @@ server/ai.js          Claude API (one streamed turn per request; the page runs t
 server/news.js        keyed news APIs and price fallbacks, normalised
 server/keys.js        the API key registry, .env writer
 public/newsmodel.js   the news learning model (browser + Node)
+public/marketmodel.js the market model: price, levels, context, news and fundamentals across all assets
 server/config.js      reads .env and tapewire.config.json
 ```
 
