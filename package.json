@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server/server.js",
-    "check": "node --check server/server.js && node server/selftest.js"
+    "check": "node --check server/server.js && node server/selftest.js && node server/modeltest.js && node server/newstest.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0"

@@ -4,6 +4,7 @@
 //   2. a built-in adapter that talks to the public REST API and returns the same shapes, or
 //   3. a `server_not_connected` error the page already knows how to show.
 // Free data (RSS, public JSON, Crypto.com, Google News search) needs no key at all.
+import { newsConnector, priceFallback, configuredNews, NEWS_PROVIDERS } from "./news.js";
 
 export class ToolError extends Error {
   constructor(code, message, extra = {}) { super(message); this.code = code; Object.assign(this, extra); }
@@ -92,8 +93,12 @@ function twelveData(cfg) {
     return { json };
   };
   return {
-    async get_quote({ symbol, prepost }) { const r = await call("quote", { symbol, prepost }); return r.json ? { result: semi([flatten(r.json)]) } : r; },
+    async get_quote({ symbol, prepost }) {
+      if (!cfg.keys.twelvedata && priceFallback.available(cfg.keys)) return { result: semi([await priceFallback.quote(cfg.keys, symbol)]) };
+      const r = await call("quote", { symbol, prepost }); return r.json ? { result: semi([flatten(r.json)]) } : r;
+    },
     async get_time_series({ symbol, interval = "1day", outputsize = 30, start_date, end_date, prepost }) {
+      if (!cfg.keys.twelvedata && priceFallback.available(cfg.keys)) return { result: semi(await priceFallback.series(cfg.keys, symbol, interval, outputsize)) };
       const r = await call("time_series", { symbol, interval, outputsize, start_date, end_date, prepost }); if (!r.json) return r;
       return { result: semi((r.json.values || []).map((v) => ({ datetime: v.datetime, open: v.open, high: v.high, low: v.low, close: v.close, volume: v.volume ?? "" }))) };
     },
@@ -220,13 +225,18 @@ export function makeConnectors(cfg) {
     "Alpha Vantage MCP Server": alphaVantage(cfg),
     "Firecrawl": firecrawl(cfg),
     "TinyFish": tinyfish,
-    "Tavily": tavily(cfg)
+    "Tavily": tavily(cfg),
+    "News APIs": newsConnector(cfg)
   };
-  const remote = new Map(Object.entries(cfg.mcp || {}).filter(([, s]) => s && s.url && s.enabled !== false).map(([k, s]) => [k, new RemoteMcp(k, s)]));
+  const mcpSpecs = { ...cfg.mcp };
+  // a CoinMarketCap / Bigdata.com key in .env switches on their MCP servers without editing the config file
+  if (cfg.keys.cmc && !mcpSpecs.CoinMarketCap?.url) mcpSpecs.CoinMarketCap = { url: cfg.mcpUrls.cmc, headers: { "X-CMC-MCP-API-KEY": cfg.keys.cmc } };
+  if (cfg.keys.bigdata && !mcpSpecs["Bigdata.com"]?.url) mcpSpecs["Bigdata.com"] = { url: cfg.mcpUrls.bigdata, headers: { "X-API-KEY": cfg.keys.bigdata } };
+  const remote = new Map(Object.entries(mcpSpecs).filter(([, s]) => s && s.url && s.enabled !== false).map(([k, s]) => [k, new RemoteMcp(k, s)]));
   const status = () => {
     const out = {};
     for (const n of new Set([...Object.keys(builtin), ...remote.keys(), "CoinMarketCap", "Bigdata.com"])) {
-      out[n] = remote.has(n) ? "remote MCP" : n === "Twelve Data" ? (cfg.keys.twelvedata ? "API key" : "needs key") : n === "Alpha Vantage MCP Server" ? (cfg.keys.alphavantage ? "API key" : "needs key") : n === "Tavily" ? (cfg.keys.tavily ? "API key" : "needs key") : builtin[n] ? (n === "Firecrawl" && cfg.keys.firecrawl ? "direct + API key" : "direct (free)") : "not configured";
+      out[n] = remote.has(n) ? "remote MCP" : n === "News APIs" ? (configuredNews(cfg.keys).length ? `${configuredNews(cfg.keys).length} provider${configuredNews(cfg.keys).length > 1 ? "s" : ""}` : "needs keys") : n === "Twelve Data" ? (cfg.keys.twelvedata ? "API key" : priceFallback.available(cfg.keys) ? "fallback (Finnhub/FMP/Polygon)" : "needs key") : n === "Alpha Vantage MCP Server" ? (cfg.keys.alphavantage ? "API key" : "needs key") : n === "Tavily" ? (cfg.keys.tavily ? "API key" : "needs key") : builtin[n] ? (n === "Firecrawl" && cfg.keys.firecrawl ? "direct + API key" : "direct (free)") : "not configured";
     }
     return out;
   };
@@ -236,8 +246,23 @@ export function makeConnectors(cfg) {
     if (!h) throw new ToolError("server_not_connected", `${server} isn't set up. Add it under "mcp" in tapewire.config.json to use it.`);
     const fn = h[tool];
     if (typeof fn !== "function") throw new ToolError("tool_error", `${server} has no built-in "${tool}" tool. Configure the remote MCP server for it in tapewire.config.json.`);
-    const payload = await fn.call(h, input || {});
+    let payload;
+    try { payload = await fn.call(h, input || {}); }
+    catch (e) { if (e instanceof ToolError) throw e; throw new ToolError(e.code || "tool_error", e.message, { retryable: e.code === "server_unavailable" }); }
     return { payload, content: [{ type: "text", text: typeof payload === "string" ? payload : JSON.stringify(payload) }] };
   }
-  return { call, status };
+  /* lightweight live check of one key, for the setup page */
+  async function test(id) {
+    const k = cfg.keys; const sample = (items) => (items[0] ? ` Latest: “${String(items[0].title).slice(0, 90)}”` : "");
+    const prov = Object.entries(NEWS_PROVIDERS).find(([, p]) => p.keys.includes(id));
+    if (id === "anthropic") { if (!cfg.anthropic.apiKey) return { ok: false, message: "No key saved." }; const { default: Anthropic } = await import("@anthropic-ai/sdk"); const page = await new Anthropic({ apiKey: cfg.anthropic.apiKey }).models.list({ limit: 1 }); return { ok: true, message: `Key works (${page.data?.[0]?.id || "models listed"}).` }; }
+    if (prov) { const [pid, p] = prov; if (!p.keys.every((x) => k[x])) return { ok: false, message: `${p.label} needs: ${p.keys.join(" + ")}.` }; const r = await newsConnector(cfg).latest({ provider: pid, symbols: ["AAPL"], limit: 5 }); return { ok: true, message: `${r.items.length} headlines.${sample(r.items)}` }; }
+    if (id === "twelvedata") { const r = await builtin["Twelve Data"].get_quote({ symbol: "AAPL" }); const ok = /AAPL/.test(r.result || ""); return { ok, message: ok ? "Quote received for AAPL." : String(r.result).slice(0, 200) }; }
+    if (id === "alphavantage") { const j = await builtin["Alpha Vantage MCP Server"].GLOBAL_QUOTE({ symbol: "IBM" }); const ok = !!j?.["Global Quote"]?.["05. price"]; return { ok, message: ok ? `IBM ${j["Global Quote"]["05. price"]}` : JSON.stringify(j).slice(0, 200) }; }
+    if (id === "tavily") { const j = await builtin.Tavily.tavily_search({ query: "stock market", topic: "news", max_results: 1 }); return { ok: true, message: `${(j.results || []).length} result(s).` }; }
+    if (id === "firecrawl") { if (!k.firecrawl) return { ok: false, message: "No key saved." }; const r = await fetch("https://api.firecrawl.dev/v2/search", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${k.firecrawl}` }, body: JSON.stringify({ query: "nasdaq", limit: 1 }) }); return { ok: r.ok, message: r.ok ? "Key works." : `HTTP ${r.status}` }; }
+    if (id === "cmc" || id === "bigdata") { const name = id === "cmc" ? "CoinMarketCap" : "Bigdata.com"; const rm = remote.get(name); if (!rm) return { ok: false, message: "No key saved." }; await rm.ensure(); const t = await rm.rpc("tools/list", {}); return { ok: true, message: `Connected: ${(t?.tools || []).length} tools.` }; }
+    return { ok: false, message: "No test for this key." };
+  }
+  return { call, status, test, news: () => configuredNews(cfg.keys).map((id) => ({ id, label: NEWS_PROVIDERS[id].label })) };
 }

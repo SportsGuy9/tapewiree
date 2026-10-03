@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { KEY_SPECS } from "./keys.js";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -38,12 +39,8 @@ export function loadConfig() {
       fallbacks: a.fallbacks !== false,
       promptBudgetKB: +(env("TAPEWIRE_PROMPT_KB") || a.promptBudgetKB || 160)
     },
-    keys: {
-      alphavantage: env("ALPHAVANTAGE_API_KEY") || file.keys?.alphavantage || "",
-      twelvedata: env("TWELVEDATA_API_KEY") || file.keys?.twelvedata || "",
-      firecrawl: env("FIRECRAWL_API_KEY") || file.keys?.firecrawl || "",
-      tavily: env("TAVILY_API_KEY") || file.keys?.tavily || ""
-    },
+    keys: Object.fromEntries(KEY_SPECS.map((k) => [k.id, env(k.env) || file.keys?.[k.id] || ""])),
+    mcpUrls: { cmc: env("COINMARKETCAP_MCP_URL") || "https://mcp.coinmarketcap.com/mcp", bigdata: env("BIGDATA_MCP_URL") || "https://mcp.bigdata.com/" },
     // optional remote MCP servers, keyed by the connector name the page uses
     mcp: file.mcp || {},
     backupsKeep: file.backupsKeep || 21

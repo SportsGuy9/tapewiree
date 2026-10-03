@@ -2,6 +2,7 @@
 <title>Tapewire</title>
 <script src="/api/env.js"></script>
 <script src="/runtime.js"></script>
+<script src="/newsmodel.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -382,7 +383,8 @@ button.tk:hover{border-color:var(--accent);color:var(--accent)}
               <option value="">All sources</option>
               <option value="av">Alpha Vantage</option>
               <option value="bd">Bigdata.com</option>
-              <option value="nb">News bus (33+ feeds)</option>
+              <option value="kn">News APIs (Benzinga, Finnhub, Polygon…)</option>
+              <option value="nb">News bus (50+ feeds)</option>
               <option value="tfs">News search (confirmations)</option>
               <option value="sec">SEC filings</option>
               <option value="halt">Trading halts</option>
@@ -802,10 +804,13 @@ button.tk:hover{border-color:var(--accent);color:var(--accent)}
     <section class="panel" id="panel-sources" role="tabpanel" aria-labelledby="tab-sources" hidden>
       <div class="stack">
         <div class="card"><div class="body note" style="display:flex;flex-direction:column;gap:6px">
-          <div><b style="color:var(--ink)">How keys work here.</b> Tapewire runs on your own computer. API keys live in the <code>.env</code> file next to the app, never in this page. News feeds, SEC filings, Yahoo quotes, Kalshi, FRED, CNN Fear &amp; Greed, Treasury auctions and Crypto.com are fetched directly and cost nothing. Twelve Data, Alpha Vantage and Tavily need a (free) key in <code>.env</code>; CoinMarketCap and Bigdata.com can be added as remote MCP servers in <code>tapewire.config.json</code>. AI features need <code>ANTHROPIC_API_KEY</code>. Any RSS or Atom feed can join the catalog under Watch settings.</div><div id="connLine"></div>
+          <div><b style="color:var(--ink)">How keys work here.</b> Tapewire runs on your own computer. API keys live in the <code>.env</code> file next to the app (manage them in the API keys card below), never in this page or the library. News feeds, SEC filings, Yahoo quotes, Kalshi, FRED, CNN Fear &amp; Greed, Treasury auctions and Crypto.com are fetched directly and cost nothing. Twelve Data, Alpha Vantage and Tavily need a (free) key in <code>.env</code>; CoinMarketCap and Bigdata.com can be added as remote MCP servers in <code>tapewire.config.json</code>. AI features need <code>ANTHROPIC_API_KEY</code>. Any RSS or Atom feed can join the catalog under Watch settings.</div><div id="connLine"></div>
           <div><b style="color:var(--ink)">When it collects.</b> The collector runs while this page is open in at least one browser tab (leave one open during market hours). Only one tab collects at a time; the others read the same library. Everything is stored on this computer, in the <code>data</code> folder, with a daily backup.</div>
           <div id="watcherLine"></div>
         </div></div>
+        <div class="card" id="keysCard"><header><h2>API keys &amp; connectors</h2><div class="row"><span class="note" id="keysStatus"></span><button class="btn primary sm" id="keysSave" type="button">Save keys</button></div></header>
+          <div class="body note" style="padding-bottom:0">Paste a key and press Save keys; it is written to the <code>.env</code> file on this computer and takes effect immediately (the page reloads). Keys never leave your machine except to call their own service. Test checks a key with one live call.</div>
+          <div class="body" id="keysBox"><p class="note" style="margin:0">Loading…</p></div></div>
         <div class="srcgrid" id="srcGrid"></div>
         <div class="card">
           <header><h2>Watch settings</h2><div class="row"><span class="note" id="cfgStatus"></span><button class="btn primary sm" id="cfgSave" type="button">Save settings</button></div></header>
@@ -855,7 +860,7 @@ button.tk:hover{border-color:var(--accent);color:var(--accent)}
 /* ---------- constants ---------- */
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5;
 const TAB_ID = "tab-" + Math.random().toString(36).slice(2, 10);
-const SRV = { av: "Alpha Vantage MCP Server", bd: "Bigdata.com", fc: "Firecrawl", cx: "Crypto.com", td: "Twelve Data", tf: "TinyFish", tv: "Tavily", cmc: "CoinMarketCap" };
+const SRV = { kn: "News APIs", av: "Alpha Vantage MCP Server", bd: "Bigdata.com", fc: "Firecrawl", cx: "Crypto.com", td: "Twelve Data", tf: "TinyFish", tv: "Tavily", cmc: "CoinMarketCap" };
 const SOURCES = {
   perp: { name: "Perp idea marks (Aster)", server: SRV.cx, svc: "cx", feeds: "Marks every live Aster perp idea each minute: fills orders, trails to breakeven, closes at stop, target or time. Liquid contracts use Crypto.com's matching perp (free) scaled to Aster's price; thinner ones use Aster's own 1m candles every 3 minutes (1 Firecrawl credit)." },
   ast:  { name: "Aster market scan", server: SRV.fc, svc: "fc", feeds: "All Aster perp markets with 24h volume, range and funding. Refreshes only while you're using the Perps or Crypto tab. Through TinyFish ($0.001, plus $0.001 for funding once an hour); falls back to Firecrawl (1 credit) when TinyFish is unavailable." },
@@ -866,7 +871,8 @@ const SOURCES = {
   ys:   { name: "Sectors & watchlist stocks", server: SRV.fc, svc: "fc", feeds: "QQQ, SMH, the 11 sector ETFs, credit and bond ETFs, plus every stock on your watchlist. 2 credits per refresh." },
   cx:   { name: "Crypto prices", server: SRV.cx, svc: "cx", feeds: "BTC, ETH and SOL live from Crypto.com. Free." },
   av:   { name: "News + sentiment", server: SRV.av, svc: "av", feeds: "Alpha Vantage news with per-ticker sentiment, rotating Fed, markets, tech, macro and earnings topics." },
-  nb:   { name: "News bus (TinyFish)", server: SRV.tf, svc: "tf", feeds: "Reads 33+ feeds in batches of up to 10 for $0.001 a feed: Bloomberg, MarketWatch, FT, CNBC, ForexLive, FXStreet, Seeking Alpha, Reuters via Investing.com, eight Google News desks, Trump's posts, the Fed, ECB and BLS, OilPrice, CoinDesk, Cointelegraph, SEC 8-K filings (all companies plus one feed per watchlist stock), Yahoo headlines for your watchlist, Nasdaq trading halts, StockTwits trending and Reddit. Each feed has a minimum interval; within the daily budget, feeds that keep producing important headlines get polled more. Spending is paced across the day, weighted to the US morning." },
+  kn:   { name: "News APIs (keyed)", server: SRV.kn, svc: "kn", feeds: "Professional newswires through your own API keys: Benzinga via Alpaca (real time), Finnhub market and watchlist-company news, Polygon ticker-tagged news with sentiment, Benzinga direct, Financial Modeling Prep, Marketaux (entity sentiment), Tiingo and NewsAPI. Each provider is paced to its free-tier limit. Add keys under API keys above." },
+  nb:   { name: "News bus (feeds)", server: SRV.tf, svc: "tf", feeds: "Reads 33+ feeds in batches of up to 10 for $0.001 a feed: Bloomberg, MarketWatch, FT, CNBC, ForexLive, FXStreet, Seeking Alpha, Reuters via Investing.com, eight Google News desks, Trump's posts, the Fed, ECB and BLS, OilPrice, CoinDesk, Cointelegraph, SEC 8-K filings (all companies plus one feed per watchlist stock), Yahoo headlines for your watchlist, Nasdaq trading halts, StockTwits trending and Reddit. Each feed has a minimum interval; within the daily budget, feeds that keep producing important headlines get polled more. Spending is paced across the day, weighted to the US morning." },
   edgar: { name: "SEC EDGAR intelligence", server: SRV.tf, svc: "tf", feeds: "Official SEC data for every company on your SEC watchlist (your watchlist stocks plus any extra tickers): the full filing list from data.sec.gov submissions every 90 minutes in market hours (sooner when the live 8-K feed shows a new filing), 8-K text split by item, earnings press releases (EX-99) with outlook quotes, every Form 4 parsed into insider trades (open-market buys vs planned 10b5-1 sales vs tax withholding), and XBRL financials refreshed after each 10-Q/10-K. 1 unit per document, capped per day on the SEC tab." },
   cry:  { name: "Crypto & perps desk", server: SRV.tf, svc: "tf", feeds: "Every Crypto.com perp's price and open interest (free, every 10 minutes; the desk samples OI every 30 minutes to measure 4h and 24h changes) and 4h/daily candles for BTC, ETH and SOL (free, hourly). Through TinyFish at $0.001 a URL: OKX funding for every coin and BTC/ETH liquidations hourly (every 30 minutes while you're on the Crypto or Perps tab or a perp idea is live), Deribit DVOL, OKX open interest, taker flow and long/short every 2 hours, spot ETF flows, Coinbase premium, CoinGecko breadth and futures basis every 4 hours, the BTC options chain every 6, stablecoin supply twice a day. OKX open interest for every coin hourly. About 150 to 200 units a day (about $0.20), capped on the Crypto tab." },
   cmc:  { name: "CoinMarketCap", server: SRV.cmc, svc: "cmc", feeds: "Through your CoinMarketCap connector: quotes for 15 majors every 15 minutes (5 while the Crypto tab is open), global derivatives open interest and BTC liquidations split long/short, Fear & Greed, Altcoin Season, dominance, average funding and spot-ETF assets every 30 minutes, daily technicals (moving averages, RSI, MACD, pivot, Fibonacci) for BTC, ETH and SOL and the whole market every 2 to 4 hours, trending narratives every 2 hours, coin news (onto the wire) every 90 minutes, news-derived upcoming catalysts every 6 hours and holder distribution daily. About 300 calls a day; the cap is on the Crypto tab." },
@@ -888,13 +894,13 @@ const SOURCES = {
   cal:  { name: "Bigdata calendar", server: SRV.bd, svc: "bd", feeds: "Bigdata.com economic calendar with actual values. Off until credits are topped up." },
   tv:   { name: "Tavily news search", server: SRV.tv, svc: "tv", feeds: "Tavily's news search (free plan: 1,000 searches a month). Needs TAVILY_API_KEY in .env; off until then." }
 };
-const SRC_ORDER = ["perp", "pnl", "yq", "tq", "tdb", "cx", "ffc", "rel", "nb", "edgar", "fx", "cry", "cmc", "tfs", "kal", "scr", "av", "rss", "ys", "auct", "fng", "fred", "earn", "read", "fc", "tv", "ast", "mk", "bd", "cal"];
+const SRC_ORDER = ["perp", "pnl", "yq", "tq", "tdb", "cx", "ffc", "rel", "kn", "nb", "edgar", "fx", "cry", "cmc", "tfs", "kal", "scr", "av", "rss", "ys", "auct", "fng", "fred", "earn", "read", "fc", "tv", "ast", "mk", "bd", "cal"];
 const MODES = {
   lean:     { label: "Lean", perHour: "about 5", sources: { perp: 1, ast: 30, pnl: 5, tq: 20, tdb: 15, yq: 30, ys: 120, rss: 20, read: 30, kal: 180, fng: 360, fred: 360, earn: 360, auct: 60, ffc: 720, fc: 0 }, readPerRun: 3 },
   standard: { label: "Standard", perHour: "about 12", sources: { perp: 1, ast: 15, pnl: 5, tq: 10, tdb: 10, yq: 15, ys: 60, rss: 12, read: 20, kal: 90, fng: 180, fred: 240, earn: 240, auct: 30, ffc: 480, fc: 0 }, readPerRun: 4 },
   max:      { label: "Max", perHour: "about 30", sources: { perp: 1, ast: 10, pnl: 5, tq: 5, tdb: 5, yq: 5, ys: 30, rss: 6, read: 15, kal: 30, fng: 60, fred: 120, earn: 120, auct: 20, ffc: 360, fc: 120 }, readPerRun: 5 }
 };
-const SVC_NAME = { av: "Alpha Vantage", bd: "Bigdata.com", fc: "Firecrawl", cx: "Crypto.com", td: "Twelve Data", tf: "TinyFish", tv: "Tavily", cmc: "CoinMarketCap" };
+const SVC_NAME = { kn: "News APIs", av: "Alpha Vantage", bd: "Bigdata.com", fc: "Firecrawl", cx: "Crypto.com", td: "Twelve Data", tf: "TinyFish", tv: "Tavily", cmc: "CoinMarketCap" };
 const GNEWS = (q) => "https://news.google.com/rss/search?q=" + encodeURIComponent(q) + "&hl=en-US&gl=US&ceid=US:en";
 const DEFAULT_FEEDS = [
   { name: "Google News · markets", url: GNEWS('"Nasdaq" OR "Wall Street" OR "stock futures" when:2h') },
@@ -912,7 +918,7 @@ const DEFAULTS = {
   watchlist: ["NQ", "NDX", "SPX", "QQQ", "NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "TSLA", "AMD", "AVGO", "MU", "BTC"],
   keywords: ["Warsh", "rate hike", "PCE", "payrolls", "Micron", "Hormuz"],
   alertThreshold: 7,
-  caps: { av: 25, bd: 150, fc: 120, cx: 5000, td: 650, tf: 500, tv: 30, cmc: 400 },
+  caps: { av: 25, bd: 150, fc: 120, cx: 5000, td: 650, tf: 500, tv: 30, cmc: 400, kn: 3000 },
   tfSearch: 12,
   nbOff: [],
   learn: true,
@@ -924,7 +930,7 @@ const DEFAULTS = {
   mode: "lean",
   sources: {
     perp: { on: true, every: 1 }, ast: { on: true, every: 30 }, pnl: { on: true, every: 5 }, tq: { on: true, every: 20 }, tdb: { on: true, every: 15 }, yq: { on: true, every: 30 }, ys: { on: true, every: 120 }, cx: { on: true, every: 5 }, av: { on: true, every: 80 },
-    nb: { on: true, every: 2 }, edgar: { on: true, every: 3 }, fx: { on: true, every: 2 }, cry: { on: true, every: 3 }, cmc: { on: true, every: 2 }, tfs: { on: true, every: 10 }, tv: { on: false, every: 90 },
+    kn: { on: true, every: 1 }, nb: { on: true, every: 2 }, edgar: { on: true, every: 3 }, fx: { on: true, every: 2 }, cry: { on: true, every: 3 }, cmc: { on: true, every: 2 }, tfs: { on: true, every: 10 }, tv: { on: false, every: 90 },
     rss: { on: true, every: 20 }, ffc: { on: true, every: 720 }, rel: { on: true, every: 1 }, read: { on: true, every: 20 },
     kal: { on: true, every: 180 }, fng: { on: true, every: 360 }, fred: { on: true, every: 360 }, earn: { on: true, every: 360 }, auct: { on: true, every: 60 },
     fc: { on: false, every: 120 }, scr: { on: true, every: 60 }, mk: { on: false, every: 15 }, bd: { on: false, every: 30 }, cal: { on: false, every: 720 }
@@ -1212,7 +1218,9 @@ let tfNext = 0;
 async function tfSlot() { const now = Date.now(); const wait = Math.max(0, tfNext - now); tfNext = Math.max(now, tfNext) + 1500; if (wait) await sleep(wait); }
 const callUnits = (svc, tool, input) => (svc !== "tf" ? 1 : tool === "search" ? 5 : tool === "fetch_content" ? (input?.urls?.length || 1) : 0);
 let fcNext = 0;
-async function fcSlot() { const now = Date.now(); const wait = Math.max(0, fcNext - now); fcNext = Math.max(now, fcNext) + 7000; if (wait) await sleep(wait); }
+// Firecrawl's API allows ~10 calls a minute; without a Firecrawl key every "scrape" is a free direct fetch, so pace lightly
+const fcGap = () => (/direct \(free\)/.test(window.__TW?.connectors?.Firecrawl || "") ? 1200 : 7000);
+async function fcSlot() { const now = Date.now(); const wait = Math.max(0, fcNext - now); fcNext = Math.max(now, fcNext) + fcGap(); if (wait) await sleep(wait); }
 async function call(src, tool, input, svcOverride) {
   const meta = SOURCES[src]; const svc = svcOverride || meta.svc; const server = SRV[svc];
   if (!S.mcp) return { ok: false, code: "capability_disabled" };
@@ -1272,7 +1280,7 @@ function extractTickers(text) {
   for (const [re, tk] of NAME_TK) if (re.test(text)) out.add(tk);
   return [...out].slice(0, 6);
 }
-function scoreText(title, sum, outlet, sent, tk) {
+function scoreText(title, sum, outlet, sent, tk, ev) {
   const text = `${title} ${sum || ""}`;
   let imp = 1;
   if (sent != null && Number.isFinite(sent)) imp += Math.min(2, Math.abs(sent) * 4);
@@ -1294,19 +1302,22 @@ function scoreText(title, sum, outlet, sent, tk) {
   if (LOWSIG.test(outlet || "")) imp -= 1.2;
   const op = OPINION.some((re) => re.test(title)) ? 1 : 0;
   if (op) imp -= 2;
-  imp += learnedAdj(klass, outlet, tk);
-  return { imp: r1(clamp(imp, 0, 10)), klass, w, op };
+  const ri = r1(clamp(imp, 0, 10));
+  imp += learnedAdj(klass, outlet, tk, { ...(ev || {}), title, sum, outlet, sent, tk, ri, w, op, cls: klass || (tk?.length ? "company" : "general") });
+  return { imp: r1(clamp(imp, 0, 10)), ri, klass, w, op };
 }
 function buildEvent(r) {
   if (JUNK.some((re) => re.test(r.title))) return null;
   const tk = [...new Set((r.tk || []).map((x) => String(x).replace(/^CRYPTO:/, "").replace(/^FOREX:/, "")))].slice(0, 6);
-  const { imp, klass, w, op } = scoreText(String(r.title), r.sum, r.outlet, r.sent, tk);
+  const { imp, ri, klass, w, op } = scoreText(String(r.title), r.sum, r.outlet, r.sent, tk, r);
   const e = {
     id: "e" + hash(normTitle(r.title)), t: r.t, src: r.src, outlet: String(r.outlet || "").slice(0, 60), title: String(r.title).slice(0, 220),
     url: safeUrl(r.url) || "", sum: String(r.sum || "").replace(/\s+/g, " ").slice(0, 300), tk, cls: klass || (tk.length ? "company" : "general"),
     imp, w, al: imp >= S.config.alertThreshold ? 1 : 0, rg: regimeTags()
   };
   if (op) e.op = 1;
+  e.ri = ri;
+  if (S.newsModel2?.heads && e.title) { const mp = modelPredict({ ...e, id: undefined }); if (mp) { e.pb = mp.pBig; if (mp.pUp != null) e.pu = mp.pUp; e.mv = S.newsModel2.t; } }
   if (r.fd) e.fd = String(r.fd).slice(0, 16);
   if (r.id) e.id = String(r.id).slice(0, 40);
   if (r.sec) e.sec = r.sec;
@@ -1335,7 +1346,7 @@ async function ingest(kind, p, meta = {}) {
   }
   const raw = [];
   if (kind === "raw") {
-    for (const it of p?.items || []) raw.push({ t: typeof it.t === "number" ? it.t : parseISO(it.t), src: ["av", "bd", "fc", "rss", "nb", "sec", "halt", "tfs", "tv"].includes(it.src) ? it.src : "bw", fd: it.fd ? String(it.fd) : undefined, outlet: it.outlet, title: it.title, url: it.url, sum: it.sum, sent: num(it.sent), tk: Array.isArray(it.tk) ? it.tk.map(String) : extractTickers(`${it.title} ${it.sum || ""}`) });
+    for (const it of p?.items || []) raw.push({ t: typeof it.t === "number" ? it.t : parseISO(it.t), src: ["av", "bd", "fc", "rss", "nb", "sec", "halt", "tfs", "tv", "kn"].includes(it.src) ? it.src : "bw", fd: it.fd ? String(it.fd) : undefined, outlet: it.outlet, title: it.title, url: it.url, sum: it.sum, sent: num(it.sent), tk: Array.isArray(it.tk) ? it.tk.map(String) : extractTickers(`${it.title} ${it.sum || ""}`) });
   }
   if (kind === "av_news") {
     for (const a of p?.feed || []) raw.push({ t: parseAV(a.time_published), src: "av", outlet: a.source, title: a.title, url: a.url, sum: a.summary, sent: num(a.overall_sentiment_score), tk: (a.ticker_sentiment || []).filter((x) => num(x.relevance_score) >= 0.3).map((x) => x.ticker) });
@@ -1816,6 +1827,23 @@ const RUN = {
     await pushSnapshot(q, Object.keys(sec).length ? sec : null, Date.now(), Object.keys(stk).length ? { ...(lastSnap()?.stk || {}), ...stk } : null);
     await vixCurveCheck();
     setSrc("ys", { note: `${Object.keys(sec).length} sectors, ${Object.keys(stk).length} stocks, vol gauges` });
+  },
+  async kn() {
+    const provs = window.__TW?.news || [];
+    if (!provs.length) { setSrc("kn", { note: "No news API keys yet. Add Alpaca (free Benzinga feed), Finnhub, Polygon, FMP, Marketaux, Tiingo or NewsAPI under API keys." }); return; }
+    const EVERY = { alpaca: 2, finnhub: 3, benzinga: 3, polygon: 5, tiingo: 10, fmp: 15, marketaux: 20, newsapi: 20 };
+    const now = Date.now(); const st = { ...(S.runs.knT || {}) };
+    const due = provs.filter((p) => now - (st[p.id] || 0) >= (EVERY[p.id] || 10) * MIN && !(S.cool["kn:" + p.id] > now)).sort((a, b) => (st[a.id] || 0) - (st[b.id] || 0)).slice(0, 3);
+    if (!due.length) return false;
+    const notes = [];
+    for (const p of due) {
+      st[p.id] = now;
+      const r = await call("kn", "latest", { provider: p.id, symbols: stockSyms().slice(0, 20), limit: 50 });
+      if (!r.ok) { notes.push(`${p.label}: ${r.code}`); if (["needs_reauth", "server_not_connected"].includes(r.code)) S.cool["kn:" + p.id] = now + HOUR; else if (r.code === "rate_limited" || /429/.test(r.msg || "")) S.cool["kn:" + p.id] = now + 10 * MIN; continue; }
+      const items = (r.p?.items || []).map((x) => ({ ...x, src: "kn", fd: "kn:" + p.id, outlet: x.outlet || p.label }));
+      const n = await ingest("raw", { items }); notes.push(`${p.label} ${n} new of ${items.length}`);
+    }
+    S.runs.knT = st; setSrc("kn", { note: notes.join(" · ") });
   },
   async nb() { return runNewsBus(); },
   async tfs() { return runTfSearch(); },
@@ -2481,19 +2509,77 @@ async function trainNewsModel(force) {
   M.t = now;
   S.newsModel = M;
   await write("memory/newsModel", () => S.db.doc("memory/newsModel").set(M)).catch((e) => console.warn("newsModel", e));
+  await trainNewsModel2(force).catch((e) => console.warn("newsModel2", e));
 }
-function learnedAdj(klass, outlet, tk) {
-  const M = S.newsModel; if (!M || S.config.learn === false) return 0;
+function learnedAdj(klass, outlet, tk, ev) {
+  if (S.config.learn === false) return 0;
+  if (S.newsModel2?.active && ev?.title) { const p = modelPredict(ev); if (p) return p.adj || 0; }
+  const M = S.newsModel; if (!M) return 0;
   let a = 0; const c = M.cls?.[klass || (tk?.length ? "company" : "general")]; if (c && c.n >= 8) a += clamp((c.m - 1) * 2.5, -1, 1);
   const k = outletKey(outlet); const o = M.out?.[k]; if (o && o.n >= 10) a += clamp((o.m - 1) * 2, -0.7, 0.7);
   const R = M.rel?.[k]; if (R && R.hi >= 6) a += clamp((((R.conf + 1) / (R.conf + R.solo + 2)) - 0.5) * 1.2, -0.5, 0.5);
   return a;
 }
+
+/* ---------- news model v2: trained on the library's own measured reactions (public/newsmodel.js) ---------- */
+const _pred = new Map(); let _predT = 0;
+function modelRow(e) {
+  const tk = e.tk || []; const title = e.title || "";
+  return { t: e.t || Date.now(), title, cls: e.cls || (tk.length ? "company" : "general"), outlet: outletKey(e.outlet || e.src || ""), src: e.src, fd: e.fd, tk, ents: entitiesOf({ title, sum: "", tk }), sent: e.sent, ri: e.ri, so: (e.id && S.storyOf?.get(e.id)?.outlets) || e.so || 1, nv: e.nv || 0, cal: e.cal || null, rg: e.rg || regimeTags(), op: e.op ? 1 : 0, w: e.w ? 1 : 0 };
+}
+function modelPredict(e) {
+  const M2 = S.newsModel2; if (!M2?.heads || !window.TWNewsModel || !e?.title) return null;
+  if (_predT !== M2.t) { _pred.clear(); _predT = M2.t; }
+  const key = e.id ? `${e.id}|${e.ri ?? ""}` : null; if (key && _pred.has(key)) return _pred.get(key);
+  let p = null; try { p = TWNewsModel.predict(M2, modelRow(e)); } catch (err) { console.warn("model predict", err); }
+  if (key) { if (_pred.size > 30000) _pred.clear(); _pred.set(key, p); }
+  return p;
+}
+async function trainNewsModel2(force) {
+  if (!window.TWNewsModel || !S.db || !S.loaded.model2) return null;
+  const now = Date.now(); if (!force && now - (S.newsModel2?.t || 0) < 3 * HOUR) return null;
+  const evById = new Map(S.events.map((e) => [e.id, e])); const recs = [];
+  for (const [id, r] of S.reactions) {
+    const h1 = r.x?.h1; const m1 = h1 ? h1.NQ ?? h1.QQQ ?? h1.NDX : null; if (m1 == null) continue;
+    const e = evById.get(id); const title = r.h || e?.title; if (!title) continue; const tk = r.tk || e?.tk || [];
+    recs.push({ t: r.t, title, cls: r.c, outlet: outletKey(r.o || e?.outlet || r.src || ""), src: r.src, fd: r.fd, tk, ents: entitiesOf({ title, sum: "", tk }), sent: r.s, ri: r.ri ?? e?.ri ?? r.i, so: r.so ?? 1, nv: r.nv ?? e?.nv ?? 0, cal: r.cal ?? e?.cal ?? null, rg: r.rg ?? e?.rg ?? null, op: r.op ?? (e?.op ? 1 : 0), w: r.w ?? e?.w ?? 0, m1, y10: h1.Y10 ?? null, ab: h1.S ? Object.values(h1.S)[0] : null, pb: r.pb ?? e?.pb ?? null, pu: r.pu ?? e?.pu ?? null });
+  }
+  const res = TWNewsModel.train(recs); const prev = S.newsModel2?.heads ? S.newsModel2 : null;
+  let doc;
+  if (res.status !== "trained") doc = { ...(prev || {}), status: prev ? prev.status : "warming", t: now, warming: { n: res.n, need: res.need }, history: prev?.history || [] };
+  else {
+    // champion/challenger: a retrain that validates clearly worse than the model in use doesn't replace it, unless the data grew a lot
+    const worse = prev?.active && res.metrics.auc != null && prev.metrics?.auc != null && res.metrics.auc < prev.metrics.auc - 0.03 && res.n < prev.n * 1.25;
+    const entry = { t: res.t, n: res.n, auc: res.metrics.auc, baseAuc: res.metrics.baseAuc, dirAcc: res.metrics.dirAcc, sp: res.metrics.spearman, active: res.active, kept: !worse };
+    doc = worse ? { ...prev, t: now, history: [...(prev.history || []), entry].slice(-120), lastRejected: entry } : { ...res, history: [...(prev?.history || []), entry].slice(-120) };
+  }
+  S.newsModel2 = doc; _pred.clear();
+  await write("memory/newsModel2", () => S.db.doc("memory/newsModel2").set(doc)).catch((e) => console.warn("newsModel2", e));
+  if (S.bucketsLoaded) rebuildEvents();
+  return doc;
+}
+const FEAT_LABEL = { w: "word", b: "phrase", o: "outlet", c: "category", tk: "ticker", e: "topic", tod: "time", dow: "day", src: "source", fd: "feed", rg: "regime", vol: "volatility", yl: "yields", ntk: "tickers", len: "length" };
+function featLabel(n) {
+  const [k, v] = n.includes("=") ? [n.slice(0, n.indexOf("=")), n.slice(n.indexOf("=") + 1)] : [n, ""];
+  const nice = { ri: "rule score", sent_abs: "strong tone", sent_pos: "positive tone", sent_neg: "negative tone", so: "sources confirming", nv_new: "new story", nv_rehash: "rehash", has_num: "has a number", has_pct: "has a %", question: "question headline", opinion: "opinion", watchlist: "watchlist name", cal_surp: "data surprise", cal_better: "better than expected", cal_worse: "worse than expected" }[k];
+  if (nice) return nice;
+  return `${FEAT_LABEL[k] || k} “${v.replace(/_/g, " ").replace(/&/g, " + ")}”`;
+}
+function modelHTML(e) {
+  if (e.src === "mkt") return ""; const p = modelPredict(e); if (!p) return ""; const M2 = S.newsModel2;
+  const why = (p.why || []).slice(0, 5).map(([n, c]) => `<span class="${c > 0 ? "up" : "down"}">${esc(featLabel(n))} ${c > 0 ? "+" : ""}${c}</span>`).join(" · ");
+  return `<div class="analysis" style="border-left-color:var(--s1)"><h4>News model${M2.active ? ` · adds ${p.adj > 0 ? "+" : ""}${p.adj} to importance` : " · still learning, not applied"}</h4><p>${Math.round(p.pBig * 100)}% chance this moves NQ ≥ 1.5× a normal hour${p.mult != null && M2.ok?.mag ? ` · expected ${p.mult}× a normal hour` : ""}${p.ok?.dir && p.pUp != null ? ` · lean <b class="${p.pUp >= 0.5 ? "up" : "down"}">${p.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(p.pUp, 1 - p.pUp) * 100)}%</b>` : ""}${p.ok?.rates && p.pRates != null ? ` · ${Math.round(p.pRates * 100)}% chance of a big 10-year move` : ""}${p.ok?.stock && p.pStock != null ? ` · ${Math.round(p.pStock * 100)}% chance the stock beats/lags the Nasdaq sharply` : ""}</p>${why ? `<p class="note" style="margin:0">Why: ${why}</p>` : ""}</div>`;
+}
+function model2Text() {
+  const M = S.newsModel2; if (!M?.metrics) return M?.warming ? `Trained news model: warming up (${M.warming.n} of ${M.warming.need} measured headlines needed).` : "Trained news model: not trained yet.";
+  const m = M.metrics; const fam = (h, f, dir) => (M.top?.[h]?.[f]?.[dir] || []).slice(0, 8).map((x) => x[0]).join(", ");
+  return `Trained news model (${new Date(M.t).toISOString().slice(0, 16)}Z, ${M.n} measured headlines, walk-forward validated${M.live?.auc != null ? `; live AUC ${M.live.auc} over ${M.live.n} headlines` : ""}; ${M.active ? "APPLIED to importance" : "not applied: it doesn't beat the rule score yet"}): AUC for "moves NQ ≥1.5× a normal hour" ${m.auc} vs rule score ${m.baseAuc}; top-fifth precision ${m.precTop} vs ${m.precTopBase}; direction accuracy ${m.dirAcc ?? "?"} vs base rate ${m.dirBase ?? "?"}${m.ratesAuc != null ? `; 10Y-move AUC ${m.ratesAuc}` : ""}${m.stockAuc != null ? `; stock-vs-Nasdaq AUC ${m.stockAuc}` : ""}. Words that predict big moves: ${fam("big", "w", "up") || "n/a"}; words that predict nothing happens: ${fam("big", "w", "down") || "n/a"}; outlets that move NQ: ${fam("big", "o", "up") || "n/a"}; outlets that don't: ${fam("big", "o", "down") || "n/a"}${M.ok?.dir ? `; bullish words: ${fam("dir", "w", "up")}; bearish words: ${fam("dir", "w", "down")}` : ""}.`;
+}
 function newsModelText() {
-  const M = S.newsModel; if (!M?.n) return "not trained yet (needs measured Nasdaq reactions)";
+  const M = S.newsModel; if (!M?.n) return `${model2Text()} Category weights: not trained yet (needs measured Nasdaq reactions).`;
   const cls = Object.entries(M.cls || {}).filter(([, v]) => v.n >= 5).sort((a, b) => b[1].m - a[1].m).map(([k, v]) => `${k} ${v.m}× (n${v.n}, avg |NQ 1h| ${v.abs}%)`).join(", ");
   const fast = Object.entries(M.rel || {}).filter(([, v]) => v.multi >= 4).map(([k, v]) => [k, v.first / v.multi, v]).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, f, v]) => `${k} first ${Math.round(f * 100)}% of ${v.multi}`).join(", ");
-  return `baseline |NQ 1h| ${M.base}% over ${M.n} measured events. Category weight vs baseline: ${cls || "thin"}. Fastest outlets: ${fast || "thin"}.`;
+  return `${model2Text()} Baseline |NQ 1h| ${M.base}% over ${M.n} measured events. Category weight vs baseline: ${cls || "thin"}. Fastest outlets: ${fast || "thin"}.`;
 }
 function socialText() {
   const x = S.social || {}; const parts = [];
@@ -3449,13 +3535,13 @@ function catalystsRaw(hours = 6) {
     const inst = instFor(s); const react = Object.fromEntries(inst.map((k) => [k, reactionOf(k, first)]).filter(([, v]) => v));
     const keys = s.events.map((e) => S.articles.get(e.id)?.key).filter(Boolean).flat().slice(0, 4);
     const th = lead.th && (S.threads?.items || []).find((t) => t.id === lead.th);
-    out.push({ id: s.id, t: first, last: s.last, title: lead.title, lead, events: s.events.slice().sort((a, b) => a.t - b.t).slice(0, 8), outlets: s.outlets, n: s.events.length, cls: s.cls, score: s.score, inst, react, keys, analogs: pastAnalogs(lead), nov: lead.nv, thread: th ? { title: th.title, days: Object.keys(th.days || {}).length, st: th.st, rx: th.rx } : null, conf: S.runs?.tfsConf?.[s.id] || null, rel: lead.src === "cal" || !!lead.rel });
+    out.push({ id: s.id, t: first, last: s.last, title: lead.title, lead, events: s.events.slice().sort((a, b) => a.t - b.t).slice(0, 8), outlets: s.outlets, n: s.events.length, cls: s.cls, score: s.score, inst, react, keys, analogs: pastAnalogs(lead), nov: lead.nv, thread: th ? { title: th.title, days: Object.keys(th.days || {}).length, st: th.st, rx: th.rx } : null, conf: S.runs?.tfsConf?.[s.id] || null, rel: lead.src === "cal" || !!lead.rel, model: modelPredict(lead) });
   }
   return out.sort((a, b) => b.last - a.last).slice(0, 14);
 }
 function catalystsText(hours = 6, filterFx = false) {
   const cs = catalysts(hours).filter((c) => !filterFx || c.inst.some((k) => FX_PAIRS.includes(k) || k === "DXY"));
-  return cs.map((c) => `- [${etHM(c.t)} ET, ${Math.round((Date.now() - c.t) / MIN)}m ago] ${c.title} (${c.outlets} outlet${c.outlets > 1 ? "s" : ""}, ${c.n} articles, ${c.cls}${c.nov < 0 ? ", REHASH of an older thread" : c.nov > 0 ? ", NEW" : ""}${c.thread ? `, thread day ${c.thread.days}` : ""}) → since the headline: ${Object.entries(c.react).map(([k, r]) => `${k} ${r.mv > 0 ? "+" : ""}${r.mv}${r.unit} (${r.u ?? "?"}× a normal day, ${r.st})`).join("; ") || "no reaction data"}${c.keys.length ? ` :: ${c.keys.slice(0, 2).join(" ")}`.slice(0, 380) : ""}${c.analogs.length ? ` || past analogs: ${c.analogs.slice(0, 3).map((a) => `${a.d} "${a.title.slice(0, 70)}" NQ 1h ${a.nq > 0 ? "+" : ""}${a.nq}%`).join("; ")}` : ""}`).join("\n") || "no fresh catalysts";
+  return cs.map((c) => `- [${etHM(c.t)} ET, ${Math.round((Date.now() - c.t) / MIN)}m ago] ${c.title} (${c.outlets} outlet${c.outlets > 1 ? "s" : ""}, ${c.n} articles, ${c.cls}${c.nov < 0 ? ", REHASH of an older thread" : c.nov > 0 ? ", NEW" : ""}${c.thread ? `, thread day ${c.thread.days}` : ""}${c.model ? `, model: ${Math.round(c.model.pBig * 100)}% big-move odds${c.model.ok?.dir && c.model.pUp != null ? `, lean ${c.model.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(c.model.pUp, 1 - c.model.pUp) * 100)}%` : ""}` : ""}) → since the headline: ${Object.entries(c.react).map(([k, r]) => `${k} ${r.mv > 0 ? "+" : ""}${r.mv}${r.unit} (${r.u ?? "?"}× a normal day, ${r.st})`).join("; ") || "no reaction data"}${c.keys.length ? ` :: ${c.keys.slice(0, 2).join(" ")}`.slice(0, 380) : ""}${c.analogs.length ? ` || past analogs: ${c.analogs.slice(0, 3).map((a) => `${a.d} "${a.title.slice(0, 70)}" NQ 1h ${a.nq > 0 ? "+" : ""}${a.nq}%`).join("; ")}` : ""}`).join("\n") || "no fresh catalysts";
 }
 const NEWS_PLAYBOOK = `NEWS-TRADING PLAYBOOK
 - Continuation: fresh (under 30-45 minutes), confirmed by 2+ outlets or official, NOT yet priced (under ~0.3× a normal day's move) and pointing the same way as the main driver → enter on a stop order through the post-headline range or on the first shallow pullback; stop beyond the headline's origin price or the post-headline swing.
@@ -5282,10 +5368,17 @@ function barAt(t, maxAge) {
   for (const d of S.bars.values()) for (const [bt, c] of d.q || []) if (bt <= t && (!best || bt > best[0])) best = [bt, c];
   return best && t - best[0] <= maxAge ? best[1] : null;
 }
-function measure(t0, t1) {
+function addStockAb(out, t0, t1, tk) {
+  if (!out || !tk?.length) return out; const a = snapAt(t0), b = snapAt(t1);
+  if (!a || !b || t0 - a.t > 30 * MIN || t1 - b.t > 30 * MIN) return out;
+  const nq = out.NQ ?? out.QQQ ?? out.NDX; if (nq == null) return out; const ab = {};
+  for (const T of tk) { const x = a.stk?.[T], y = b.stk?.[T]; if (x?.[0] && y?.[0] && x !== y) ab[T] = Math.round((((y[0] - x[0]) / x[0]) * 100 - nq) * 100) / 100; }
+  if (Object.keys(ab).length) out.S = ab; return out;
+}
+function measure(t0, t1, tk) {
   if (usOpen(t0) && usOpen(t1 - 5 * MIN) && S.bars.size) {
     const x = barAt(t0, 15 * MIN), y = barAt(t1, 12 * MIN);
-    if (x && y) { const out = { QQQ: Math.round(((y - x) / x) * 10000) / 100 }; const a2 = snapAt(t0), b2 = snapAt(t1); const u = a2?.q?.US10Y?.[0], v = b2?.q?.US10Y?.[0]; if (u != null && v != null && t1 - b2.t < 30 * MIN) out.Y10 = Math.round((v - u) * 1000) / 10; return out; }
+    if (x && y) { const out = { QQQ: Math.round(((y - x) / x) * 10000) / 100 }; const a2 = snapAt(t0), b2 = snapAt(t1); const u = a2?.q?.US10Y?.[0], v = b2?.q?.US10Y?.[0]; if (u != null && v != null && t1 - b2.t < 30 * MIN) out.Y10 = Math.round((v - u) * 1000) / 10; return addStockAb(out, t0, t1, tk); }
   }
   const a = snapAt(t0), b = snapAt(t1);
   const fut = a?.q?.NQ && b?.q?.NQ;
@@ -5295,7 +5388,7 @@ function measure(t0, t1) {
   const out = {};
   for (const k of fut ? ["NQ", "ES"] : ["NDX", "SPX"]) { const x = a.q[k]?.[0], y = b.q[k]?.[0]; if (x && y) out[k] = Math.round(((y - x) / x) * 10000) / 100; }
   const x = a.q.US10Y?.[0], y = b.q.US10Y?.[0]; if (x != null && y != null) out.Y10 = Math.round((y - x) * 1000) / 10; // basis points
-  return Object.keys(out).length ? out : undefined;
+  return Object.keys(out).length ? addStockAb(out, t0, t1, tk) : undefined;
 }
 async function stampReactions() {
   const now = Date.now(); const byDay = new Map();
@@ -5304,16 +5397,16 @@ async function stampReactions() {
     if (now - e.t > 4 * DAY) continue;
     const have = S.reactions.get(e.id)?.x || {};
     const patch = {};
-    for (const [lab, dt] of [["h1", HOUR], ["h4", 4 * HOUR]]) {
+    for (const [lab, dt] of [["m15", 15 * MIN], ["h1", HOUR], ["h4", 4 * HOUR]]) {
       if (lab in have) continue;
       const t1 = e.t + dt; if (now < t1 + 5 * MIN) continue;
-      let v = measure(e.t, t1);
+      let v = measure(e.t, t1, e.tk);
       if (v === undefined && now > t1 + 30 * HOUR) v = null;  // data never arrived: give up
       if (v !== undefined) patch[lab] = v;
     }
     if (!Object.keys(patch).length) continue;
     const k = dayKey(e.t); if (!byDay.has(k)) byDay.set(k, {});
-    byDay.get(k)[e.id] = { c: e.cls, i: e.imp, s: e.sent ?? null, src: e.src, cb: e.cal?.better ?? null, t: e.t, o: String(e.outlet || "").slice(0, 40), fd: e.fd || null, x: { ...have, ...patch } };
+    byDay.get(k)[e.id] = { c: e.cls, i: e.imp, ri: e.ri ?? null, s: e.sent ?? null, src: e.src, cb: e.cal?.better ?? null, t: e.t, o: String(e.outlet || "").slice(0, 40), fd: e.fd || null, h: String(e.title || "").slice(0, 180), tk: (e.tk || []).slice(0, 6), pb: e.pb ?? null, pu: e.pu ?? null, so: S.storyOf.get(e.id)?.outlets || 1, nv: e.nv || 0, rg: e.rg || null, op: e.op ? 1 : 0, w: e.w ? 1 : 0, cal: e.cal ? { cons: e.cal.cons, act: e.cal.act, better: e.cal.better ?? null } : null, x: { ...have, ...patch } };
   }
   for (const [day, recs] of byDay) {
     await write("reactions/" + day, async () => {
@@ -6712,7 +6805,7 @@ const ASK_TOOLS = [
   { name: "get_entities", description: "Mention counts per day (up to 45 days) for tickers and macro actors (Fed, Powell, Iran, OPEC, Trump, tariffs, oil, AI, chips…), with today's surge versus the 7-day pace, average importance and tone. Pass names to look up specific ones; otherwise returns the most active.", inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" } } } },
     execute: (i) => { const E = S.entities?.e || {}; if (Array.isArray(i.names) && i.names.length) return Object.fromEntries(i.names.map((n) => { const k = Object.keys(E).find((x) => x.toLowerCase() === String(n).toLowerCase()); return [n, k ? E[k] : null]; })); const today = dayKey(Date.now()); return Object.entries(E).sort((a, b) => (b[1].d[today] || 0) - (a[1].d[today] || 0)).slice(0, 30).map(([k, x]) => ({ name: k, today: x.d[today] || 0, surge: x.sg, total_45d: x.n, tone: x.s, last_headline: x.lt })); } },
   { name: "get_social", description: "Social and tape pulse: StockTwits trending symbols with their why-it's-trending summaries, most-discussed tickers and top posts on r/wallstreetbets and r/stocks, and today's Nasdaq trading halts (including repeated volatility halts, a momentum signal).", execute: () => S.social || {} },
-  { name: "get_news_model", description: "What Tapewire has learned from its own measurements: which news categories and outlets move the Nasdaq most (weights vs baseline), which outlets report first and how often their scoops get confirmed, and which feeds produce the most important headlines.", execute: () => ({ model: S.newsModel ? { ...S.newsModel, seen: undefined } : null, feeds: Object.fromEntries(Object.entries(S.nb?.f || {}).map(([k, v]) => [k, { value: v.v, new_total: v.tot, important: v.hi, alerts: v.al, last: v.t ? new Date(v.t).toISOString() : null, err: v.err || null }])) }) },
+  { name: "get_news_model", description: "What Tapewire has learned from its own measurements: which news categories and outlets move the Nasdaq most (weights vs baseline), which outlets report first and how often their scoops get confirmed, and which feeds produce the most important headlines.", execute: () => ({ trained_model: S.newsModel2?.metrics ? { trained: new Date(S.newsModel2.t).toISOString(), samples: S.newsModel2.n, applied: !!S.newsModel2.active, validation: S.newsModel2.metrics, heads_ok: S.newsModel2.ok, top_features: S.newsModel2.top, suggested_alert_threshold: S.newsModel2.threshold, history: (S.newsModel2.history || []).slice(-10) } : S.newsModel2?.warming || null, model: S.newsModel ? { ...S.newsModel, seen: undefined } : null, feeds: Object.fromEntries(Object.entries(S.nb?.f || {}).map(([k, v]) => [k, { value: v.v, new_total: v.tot, important: v.hi, alerts: v.al, last: v.t ? new Date(v.t).toISOString() : null, err: v.err || null }])) }) },
   { name: "get_weekly_memory", description: "Weekly rollups: NQ, VIX and bitcoin change for the week, dominant story threads, most-mentioned names, data releases and biggest reactions. Up to 12 weeks.", inputSchema: { type: "object", properties: { weeks: { type: "number" } } }, execute: (i) => (S.weeks || []).slice(0, clamp(+i.weeks || 4, 1, 12)) },
   { name: "analyst_view", description: "Wall Street analyst ratings, price targets and recommendation trend for one US stock or ETF, live from Twelve Data. Uses 1 Twelve Data call.", inputSchema: { type: "object", properties: { ticker: { type: "string" }, data_type: { type: "string", enum: ["ratings", "price_target", "recommendations", "eps_trend", "eps_revisions"] } }, required: ["ticker"] }, execute: async (i) => { const r = await tdCall("tq", "get_analyst_data", { symbol: String(i.ticker || "").toUpperCase(), data_type: ["ratings", "price_target", "recommendations", "eps_trend", "eps_revisions"].includes(i.data_type) ? i.data_type : "ratings" }); if (!r.ok) throw new Error("Twelve Data couldn't return analyst data (" + r.code + ")."); return String(r.text).slice(0, 6000); } }
 ];
@@ -6822,6 +6915,7 @@ function subscribe() {
   db.doc("system/social").onSnapshot((s) => { S.loaded.social = 1; if (s.exists && (!S.holder || !S.social?.t || s.data().t > S.social.t)) S.social = structuredClone(s.data()); paint(); }, onErr("social"));
   db.doc("memory/threads").onSnapshot((s) => { S.loaded.threads = 1; if (s.exists && (!S.threads || s.data().t >= S.threads.t)) S.threads = structuredClone(s.data()); paint(); }, onErr("threads"));
   db.doc("memory/entities").onSnapshot((s) => { S.loaded.entities = 1; if (s.exists && (!S.entities || s.data().t >= S.entities.t)) S.entities = structuredClone(s.data()); paint(); }, onErr("entities"));
+  db.doc("memory/newsModel2").onSnapshot((s) => { S.loaded.model2 = 1; if (s.exists && (!S.newsModel2 || s.data().t >= S.newsModel2.t)) { const had = S.newsModel2?.t; S.newsModel2 = s.data(); if (had !== S.newsModel2.t && S.bucketsLoaded) rebuildEvents(); } paint(); }, onErr("newsModel2"));
   db.doc("memory/newsModel").onSnapshot((s) => { S.loaded.model = 1; const had = S.newsModel?.t; if (s.exists && (!had || s.data().t >= had)) { S.newsModel = structuredClone(s.data()); if (had !== S.newsModel.t && S.bucketsLoaded) rebuildEvents(); } paint(); }, onErr("newsModel"));
   db.doc("system/fx").onSnapshot((s) => { S.loaded.fx = 1; if (s.exists && (!S.holder || !S.fx || (s.data().t || 0) > (S.fx.t || 0))) { const keep = { bars: S.fx?.bars || {}, daily: S.fx?.daily || {}, b5: S.fx?.b5 || {}, dcl: S.fx?.dcl || {}, xcl: S.fx?.xcl || {}, ohlc: S.fx?.ohlc || {} }; S.fx = { ...structuredClone(s.data()), ...keep }; } else if (!S.fx) S.fx = { q: {}, daily: {}, bars: {} }; paint(); }, onErr("fx"));
   db.doc("system/fxbars").onSnapshot((s) => { if (s.exists) { S.fx ||= { q: {}, daily: {}, bars: {} }; if (!S.holder || !Object.keys(S.fx.bars || {}).length) { S.fx.bars = s.data().s || {}; S.fx.b5 = s.data().s5 || {}; } } paint(); }, onErr("fxbars"));
@@ -6859,9 +6953,9 @@ function ideaAlerts() {
 }
 function rescore(e) {
   if (e.src === "mkt" || e.src === "cal") return { ...e, al: e.imp >= S.config.alertThreshold ? 1 : 0 };
-  const s = scoreText(e.title, e.sum, e.outlet, e.sent ?? null, e.tk || []);
+  const s = scoreText(e.title, e.sum, e.outlet, e.sent ?? null, e.tk || [], e);
   let imp = r1(clamp(s.imp + (e.bst || 0) + (e.ib || 0) + (e.nv || 0) + (S.articles.get(e.id)?.bump || 0), 0, 10)); if (e.fa) imp = Math.max(imp, S.config.alertThreshold);
-  return { ...e, imp, w: s.w, op: s.op, cls: e.bst ? "macro" : s.klass || (e.tk?.length ? "company" : "general"), al: imp >= S.config.alertThreshold ? 1 : 0 };
+  return { ...e, imp, ri: s.ri, w: s.w, op: s.op, cls: e.bst ? "macro" : s.klass || (e.tk?.length ? "company" : "general"), al: imp >= S.config.alertThreshold ? 1 : 0 };
 }
 function isStoryAlert(s) { const thr = S.config.alertThreshold; return s.maxImp >= thr || (s.outlets >= 3 && s.score >= thr); }
 function rebuildEvents() {
@@ -6974,13 +7068,13 @@ function filteredEvents() {
   const q = $("#fSearch").value.trim().toLowerCase(); const imp = +$("#fImp").value; const c = $("#fCls").value; const src = $("#fSrc").value; const w = $("#fWatch").checked; const op = $("#fOp").checked;
   return S.events.filter((e) => e.imp >= imp && (!c || e.cls === c) && (!src || e.src === src) && (!w || e.w) && (!op || !e.op) && (!q || `${e.title} ${e.outlet} ${e.tk.join(" ")} ${e.sum}`.toLowerCase().includes(q)));
 }
-const SRC_LABEL = { av: "Alpha Vantage", bd: "Bigdata.com", fc: "Firecrawl", rss: "News wires", nb: "News bus (TinyFish)", tfs: "News search (TinyFish)", sec: "SEC EDGAR", halt: "Nasdaq halts", tv: "Tavily", mkt: "Market watch", cal: "US economic calendar", bw: "Background watcher" };
+const SRC_LABEL = { kn: "News APIs", av: "Alpha Vantage", bd: "Bigdata.com", fc: "Firecrawl", rss: "News wires", nb: "News bus (TinyFish)", tfs: "News search (TinyFish)", sec: "SEC EDGAR", halt: "Nasdaq halts", tv: "Tavily", mkt: "Market watch", cal: "US economic calendar", bw: "Background watcher" };
 function nextRelease() { const now = Date.now(); return calEvents().find((x) => x.imp === "HIGH" && x.t > now - 2 * MIN); }
 const dur = (ms) => { const m = Math.max(0, Math.round(ms / MIN)); if (m < 60) return `${m}m`; const h = Math.floor(m / 60); if (h < 24) return `${h}h ${m % 60}m`; return `${Math.floor(h / 24)}d ${h % 24}h`; };
 function reactHTML(e) {
   const r = S.reactions.get(e.id)?.x; if (!r) return "";
   const cell = (lab, v) => (v === null ? `<span>${lab} <b>market closed</b></span>` : v ? `<span>${v.NQ != null ? "NQ" : v.QQQ != null ? "QQQ" : "NDX"} ${lab} <b class="${cls(v.NQ ?? v.QQQ ?? v.NDX)}">${fmtPct(v.NQ ?? v.QQQ ?? v.NDX)}</b>${v.Y10 != null ? ` · 10Y <b>${v.Y10 > 0 ? "+" : ""}${v.Y10}bp</b>` : ""}</span>` : "");
-  return cell("+1h", r.h1) + cell("+4h", r.h4);
+  return cell("+15m", r.m15) + cell("+1h", r.h1) + cell("+4h", r.h4);
 }
 function reactionSince(e) {
   const base = snapAt(e.t) || S.snaps.find((s) => s.t >= e.t); const now = lastSnap();
@@ -7030,6 +7124,7 @@ function paintFeed() {
       const rx = reactionSince(e);
       html += `<div class="detail">${e.sum ? `<p>${esc(e.sum)}</p>` : ""}
         <div class="kv"><span>Source <b>${esc(SRC_LABEL[e.src] || e.src)}</b></span>${e.mk ? `<span>Nasdaq at landing <b class="${cls(e.mk.NDX)}">${fmtPct(e.mk.NDX)}</b></span><span>VIX <b>${fmtN(e.mk.VIX, 2)}</b></span>` : ""}${e.rg ? `<span>Regime <b>${esc(e.rg.r)} · ${esc(e.rg.v)}</b></span>` : ""}${reactHTML(e) || (rx != null ? `<span>NQ since <b class="${cls(rx)}">${fmtPct(rx)}</b></span>` : "")}</div>
+        ${modelHTML(e)}
         ${articleHTML(e)}
         ${a ? analysisHTML(a) : ""}
         <div class="row">${url ? `<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Open article</a>` : ""}${S.sample ? `<button class="btn sm" data-act="analyze" data-id="${esc(e.id)}" ${busy ? "disabled" : ""}>${busy ? "Analyzing…" : a ? "Re-analyze" : "Analyze"}</button>${url && S.mcp ? `<button class="btn sm" data-act="deep" data-id="${esc(e.id)}" ${busy ? "disabled" : ""}>Deep read + analyze</button>` : ""}` : ""}</div></div>`;
@@ -7100,7 +7195,35 @@ function paintThreadsMemory() {
   $("#thrNote").textContent = `${items.length} thread${items.length === 1 ? "" : "s"}`;
   $("#threads").innerHTML = items.length ? items.slice(0, 40).map((t) => threadRow(t, now, true)).join("") : `<div class="body note">Threads are Tapewire's persistent story memory. Every 10 minutes the collector folds the day's story clusters into threads that last across days: each keeps a day-by-day timeline, the outlets that covered it, how fast it's growing and how the Nasdaq moved after its headlines. Headlines that only rehash an old thread lose a little importance; genuinely new ones gain a little.</div>`;
 }
+function model2HTML() {
+  const M = S.newsModel2; const busy = S.m2Busy; const pc = (v) => (v == null ? "—" : Math.round(v * 100) + "%"); const f2 = (v) => (v == null ? "—" : (+v).toFixed(2));
+  const head = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Trained model</b><span class="row">${M?.t ? `<span class="note">trained ${esc(ago(M.t))}</span>` : ""}<button class="btn sm" type="button" data-m2-retrain ${busy || !S.holder ? "disabled" : ""} title="${S.holder ? "" : "Only the collecting tab trains"}">${busy ? "Training…" : "Retrain now"}</button></span></div>`;
+  const intro = `<p class="note" style="margin:0 0 8px">A machine-learned model trained on every headline whose Nasdaq reaction Tapewire has measured: its words and phrases, outlet, feed, category, tickers, topics, time of day, market regime, tone, novelty, how many outlets confirmed it and any data surprise. Moves are scaled by how volatile the market was at the time. It predicts the chance of an outsized NQ hour, the size and direction of the move, big 10-year moves, and how far a stock beats or lags the Nasdaq. It is tested walk-forward on headlines it never saw, and it only changes importance scores while it beats the rule-based score.</p>`;
+  if (!M?.metrics) return head + intro + `<p class="note" style="margin:0 0 12px">${M?.warming ? `Warming up: ${M.warming.n} of the ${M.warming.need} measured headlines it needs. Reactions are measured during US hours while Tapewire is open.` : "Not trained yet."}</p>`;
+  const m = M.metrics; const row = (lab, a, b, good) => `<tr><td>${lab}</td><td><b class="${good == null ? "" : good ? "up" : "down"}">${a}</b></td><td>${b}</td></tr>`;
+  const tbl = `<div class="md"><div class="tbl"><table><tr><th>Out-of-sample test (${m.n} headlines, ${M.folds} walk-forward folds)</th><th>Model</th><th>Rule score</th></tr>
+    ${row("Finds headlines that move NQ ≥1.5× a normal hour (AUC; 0.5 = coin flip)", f2(m.auc), f2(m.baseAuc), m.auc != null && m.baseAuc != null ? m.auc > m.baseAuc : null)}
+    ${row("Hit rate of its top fifth of headlines", pc(m.precTop), pc(m.precTopBase), m.precTop != null ? m.precTop > (m.precTopBase ?? 0) : null)}
+    ${row("Ranks the size of the move (Spearman)", f2(m.spearman), f2(m.spearmanBase), m.spearman != null ? m.spearman > (m.spearmanBase ?? 0) : null)}
+    ${row("Probability error (Brier; lower is better)", f2(m.brier), `${f2(m.brierBase)} (base rate)`, m.brier != null ? m.brier < m.brierBase : null)}
+    ${row(`Direction of meaningful moves (${m.dirN || 0} cases)`, pc(m.dirAcc), `${pc(m.dirBase)} (usual side)`, m.dirAcc != null ? m.dirAcc > (m.dirBase ?? 0.5) : null)}
+    ${m.ratesAuc != null ? row("Big 10-year yield moves (AUC)", f2(m.ratesAuc), "0.50", m.ratesAuc > 0.55) : ""}${m.stockAuc != null ? row("Stock beats/lags the Nasdaq sharply (AUC)", f2(m.stockAuc), "0.50", m.stockAuc > 0.55) : ""}</table></div></div>`;
+  const status = `<p style="margin:6px 0"><span class="chip ${M.active ? "good" : ""}">${M.active ? `Applied · strength ${M.strength}` : "Not applied yet"}</span> <span class="note">${M.active ? `Adds up to ±${(2.5 * M.strength).toFixed(1)} importance points per headline, replacing the old category and outlet weights.` : "It needs an AUC of at least 0.55 that beats the rule score by 0.015 on unseen headlines. Until then the old category and outlet weights apply."}${M.lastRejected ? ` The last retrain (${esc(ago(M.lastRejected.t))}) tested worse, so the previous model was kept.` : ""}</span></p>`;
+  const lv = M.live; const live = lv?.n ? `<p class="note" style="margin:8px 0 0"><b style="color:var(--ink)">Live record</b> (predictions stamped on each headline as it arrived, scored once its reaction was measured): ${lv.auc != null ? `AUC <b>${f2(lv.auc)}</b> vs rule score ${f2(lv.baseAuc)} over ${lv.n} headlines${lv.dirAcc != null ? `, direction ${pc(lv.dirAcc)} of ${lv.dirN}` : ""}` : `${lv.n} headlines so far, needs 20 to score`}.</p>` : "";
+  const cal = live + ((m.calib || []).length ? `<div class="note" style="margin:8px 0 4px">Calibration: predicted vs actual share of big moves, by prediction bucket</div><div class="daybars">${m.calib.map((c) => `<div><span class="muted">pred ${pc(c.p)}</span><i style="width:${Math.max(2, c.y * 100)}%"></i><span class="num">${pc(c.y)}</span></div>`).join("")}</div>` : "");
+  const fam = (h, f, dir, n = 10) => (M.top?.[h]?.[f]?.[dir] || []).slice(0, n).map((x) => `<span class="tk">${esc(x[0].replace(/_/g, " ").replace(/&/g, " + "))}</span>`).join(" ") || '<span class="muted">—</span>';
+  const tops = `<div class="evgrid" style="margin-top:10px"><div><div class="h2" style="font-size:11px;margin-bottom:4px">Words that predict a big NQ hour</div>${fam("big", "w", "up")}<div class="h2" style="font-size:11px;margin:8px 0 4px">Phrases</div>${fam("big", "b", "up", 8)}<div class="h2" style="font-size:11px;margin:8px 0 4px">Outlets and feeds that move NQ</div>${fam("big", "o", "up", 8)} ${fam("big", "fd", "up", 6)}<div class="h2" style="font-size:11px;margin:8px 0 4px">Topics</div>${fam("big", "e", "up", 8)}</div>
+    <div><div class="h2" style="font-size:11px;margin-bottom:4px">Words that predict nothing happens</div>${fam("big", "w", "down")}<div class="h2" style="font-size:11px;margin:8px 0 4px">Outlets that rarely move NQ</div>${fam("big", "o", "down", 8)}<div class="h2" style="font-size:11px;margin:8px 0 4px">Time of day (most to least)</div>${fam("big", "tod", "up", 4)} · ${fam("big", "tod", "down", 4)}${M.ok?.dir ? `<div class="h2" style="font-size:11px;margin:8px 0 4px">Bullish words · bearish words</div>${fam("dir", "w", "up", 8)} · ${fam("dir", "w", "down", 8)}` : ""}</div></div>`;
+  const thr = M.threshold ? `<p style="margin:10px 0 0">Best alert threshold on recent headlines: <b>${M.threshold.thr}</b> (catches ${pc(M.threshold.rec)} of big moves, ${pc(M.threshold.prec)} of alerts are real). Current: <b>${S.config.alertThreshold}</b>. ${Math.abs(M.threshold.thr - S.config.alertThreshold) >= 0.5 ? `<button class="btn sm" type="button" data-apply-thr="${M.threshold.thr}">Use ${M.threshold.thr}</button>` : ""}</p>` : "";
+  const hist = (M.history || []).slice(-8).reverse();
+  const hh = hist.length ? `<div class="md" style="margin-top:8px"><div class="tbl"><table><tr><th>Retrained</th><th>Headlines</th><th>AUC</th><th>Rules</th><th>Direction</th><th>Result</th></tr>${hist.map((h) => `<tr><td>${esc(new Date(h.t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${h.n}</td><td>${f2(h.auc)}</td><td>${f2(h.baseAuc)}</td><td>${pc(h.dirAcc)}</td><td>${h.kept === false ? "rejected" : h.active ? "applied" : "learning"}</td></tr>`).join("")}</table></div></div>` : "";
+  return head + intro + status + tbl + cal + tops + thr + hh + `<hr style="border:0;border-top:1px solid var(--line-2);margin:14px 0">`;
+}
 function paintNewsModel() {
+  paintNewsModelLegacy();
+  const box = $("#newsModel"); if (box) box.insertAdjacentHTML("afterbegin", model2HTML());
+}
+function paintNewsModelLegacy() {
   const M = S.newsModel; const box = $("#newsModel");
   $("#modelNote").textContent = M?.t ? `trained ${ago(M.t)}${S.config.learn === false ? " · off" : ""}` : "";
   const nb = S.nb?.f || {}; const feeds = nbFeeds().map((f) => [f, nb[f.id]]).filter(([, st]) => st?.fetch).sort((a, b) => (b[1].v ?? 0) - (a[1].v ?? 0));
@@ -7332,6 +7455,7 @@ function paintNews() {
       <div style="font-weight:600;margin:4px 0">${safeUrl(c.lead.url) ? `<a href="${esc(c.lead.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>` : esc(c.title)}</div>
       ${c.events.length > 1 ? `<div class="note">${c.events.filter((e) => e.id !== c.lead.id).slice(0, 3).map((e) => `${esc(hm(e.t))} ${esc(e.outlet)}: ${esc(e.title.slice(0, 110))}`).join("<br>")}</div>` : ""}
       ${c.keys.length ? `<div class="note" style="color:var(--ink-2);margin-top:4px">${esc(c.keys.slice(0, 2).join(" "))}</div>` : ""}
+      ${c.model ? `<div class="note" style="margin-top:4px">News model: <b>${Math.round(c.model.pBig * 100)}%</b> chance of a ≥1.5× NQ hour${c.model.ok?.dir && c.model.pUp != null ? ` · lean <b class="${c.model.pUp >= 0.5 ? "up" : "down"}">${c.model.pUp >= 0.5 ? "up" : "down"} ${Math.round(Math.max(c.model.pUp, 1 - c.model.pUp) * 100)}%</b>` : ""}${S.newsModel2?.active ? "" : " (learning)"}</div>` : ""}
       ${Object.keys(c.react).length ? `<div class="md" style="max-width:none;margin-top:6px"><div class="tbl"><table><tr><th>Since headline</th><th>Then</th><th>Now</th><th>Move</th><th>vs normal day</th><th>Status</th></tr>${Object.entries(c.react).map(([k, r]) => reactCell(k, r)).join("")}</table></div></div>` : `<p class="note">No price reaction data for the instruments it touches yet.</p>`}
       ${c.analogs.length ? `<div class="note">Similar past headlines: ${c.analogs.slice(0, 3).map((a) => `${esc(a.d)} “${esc(a.title.slice(0, 70))}” → NQ 1h <b class="${cls(a.nq)}">${a.nq > 0 ? "+" : ""}${a.nq}%</b>`).join(" · ")}</div>` : ""}
       <div class="row" style="margin-top:8px"><button class="btn primary sm" data-cat-plan="${esc(c.id)}" ${busy[c.id] || !S.sample ? "disabled" : ""}>${busy[c.id] ? "Planning…" : plan ? "Re-plan trade" : "Plan trade"}</button><button class="btn sm" data-story="${esc(c.id)}">Open story</button></div>
@@ -7557,10 +7681,10 @@ function paintMemory() {
     <p class="note" style="margin:12px 0 0">The wire loads the last 45 daily documents (${docs} documents in view); search reaches back 90 days and the memory below keeps every day, week and thread on disk.</p>`;
 }
 function paintSources() {
-  const g = $("#srcGrid"); const now = Date.now();
+  const g = $("#srcGrid"); const now = Date.now(); loadKeys(false);
   { const cl = $("#connLine"); const c = window.__TW?.connectors; if (cl && c && !cl.dataset.done) { cl.dataset.done = 1; cl.innerHTML = `<b style="color:var(--ink)">Connected on this computer.</b> ${Object.entries(c).map(([k, v]) => `${esc(k.replace(" MCP Server", ""))}: <span class="${/needs|not/.test(v) ? "down" : "up"}">${esc(v)}</span>`).join(" · ")} · AI: <span class="${window.__TW.ai ? "up" : "down"}">${window.__TW.ai ? "on" : "needs ANTHROPIC_API_KEY"}</span>`; } }
   if (g.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type === "number") return;
-  const svcs = ["tf", "fc", "td", "av", "bd", "cmc"];
+  const svcs = ["kn", "tf", "fc", "td", "av", "bd", "cmc"];
   const capOf = (s) => (s === "tf" ? tfCapToday() : S.config.caps[s]);
   const bars = svcs.map((s) => `<div><div class="row" style="justify-content:space-between;font-size:12px"><span>${SVC_NAME[s]} today${s === "tf" ? ` <span class="muted">($${(used("tf") / 1000).toFixed(3)} · paced ${Math.round(dayFrac() * 100)}% of the day)</span>` : ""}</span><span class="num">${used(s)} / ${capOf(s)}</span></div><div class="bar"><i style="width:${Math.min(100, (used(s) / Math.max(1, capOf(s))) * 100)}%"></i></div></div>`).join("");
   if (S.mcp && tfAlive() && (!S.tfWallet || now - S.tfWallet.at > 30 * MIN) && !S.tfWalletBusy) { S.tfWalletBusy = true; S.mcp.callTool(SRV.tf, "get_wallet", {}, { cache: false }).then((r) => { const p = tfPayload(r.payload ?? (r.content || []).map((b) => b.text).join("")); S.tfWallet = { at: Date.now(), bal: p?.available_balance ?? null, cur: p?.currency || "USD" }; }).catch(() => { S.tfWallet = { at: Date.now(), bal: null }; }).finally(() => { S.tfWalletBusy = false; paint(); }); }
@@ -7636,6 +7760,11 @@ function openThread(id) { S.threadFilter = id; S.storyFilter = null; S.feedLimit
 $("#threadRail").addEventListener("click", (ev) => { const b = ev.target.closest("[data-thread]"); if (b) openThread(b.dataset.thread); });
 $("#threads").addEventListener("click", (ev) => { const b = ev.target.closest("[data-thread]"); if (b) openThread(b.dataset.thread); });
 $("#thrShow").addEventListener("change", () => paint());
+$("#newsModel").addEventListener("click", async (ev) => {
+  const rt = ev.target.closest("[data-m2-retrain]");
+  if (rt) { if (S.m2Busy) return; S.m2Busy = true; paint(); try { const d = await trainNewsModel2(true); toast(`<b>NEWS MODEL</b>${d?.metrics ? `Trained on ${d.n} headlines · AUC ${d.metrics.auc} vs rules ${d.metrics.baseAuc}${d.active ? " · applied" : " · not applied yet"}` : `Warming up: ${d?.warming?.n ?? 0} of ${d?.warming?.need ?? 80} measured headlines`}`); } catch (e) { toast(`<b>NEWS MODEL</b>${esc(e.message || "Training failed")}`); } finally { S.m2Busy = false; paint(); } return; }
+  const th = ev.target.closest("[data-apply-thr]"); if (th) { const v = +th.dataset.applyThr; await saveCfg((c) => { c.alertThreshold = v; }); toast(`<b>ALERTS</b>Alert threshold set to ${v}`); }
+});
 $("#secHours").addEventListener("change", () => paint());
 $("#fxBoard").addEventListener("click", (ev) => { const r = ev.target.closest("[data-fxpair]"); if (r) { S.fxPair = r.dataset.fxpair; paint(); } });
 $("#fxTone").addEventListener("click", (ev) => { const b = ev.target.closest("[data-fxccy]"); if (b) { S.fxNewsCcy = b.dataset.fxccy; paint(); } });
@@ -7806,6 +7935,45 @@ $("#memRestore").addEventListener("change", async (ev) => {
   try { const dump = JSON.parse(await f.text()); const r = await fetch("/api/db/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dump }) }); const j = await r.json(); if (!r.ok) throw new Error(j.message); toast(`<b>RESTORED</b>${j.restored} documents. Reloading…`); setTimeout(() => location.reload(), 1500); }
   catch (e) { toast(`<b>RESTORE</b>${esc(e.message || "That file isn't a Tapewire backup.")}`); }
 });
+
+/* ---------- API keys & connectors setup ---------- */
+async function loadKeys(force) {
+  if (!window.__TW) { $("#keysBox").innerHTML = `<p class="note" style="margin:0">Start the Tapewire server to manage keys.</p>`; return; }
+  if (S.keyInfo && !force) return;
+  try { const r = await fetch("/api/keys"); S.keyInfo = await r.json(); } catch (e) { S.keyInfo = { err: "The server isn't reachable." }; }
+  paintKeys();
+}
+function paintKeys() {
+  const box = $("#keysBox"); const K = S.keyInfo; if (!box || !K) return;
+  if (box.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;
+  if (K.err) { box.innerHTML = `<p class="err" style="margin:0">${esc(K.err)}</p>`; return; }
+  const groups = {}; for (const k of K.keys || []) (groups[k.group] ||= []).push(k);
+  const test = S.keyTest || {};
+  box.innerHTML = Object.entries(groups).map(([g, ks]) => `<div class="h2" style="font-size:11px;margin:10px 0 6px">${esc(g)}</div>${ks.map((k) => `<div style="display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:7px 0;border-top:1px solid var(--line-2)">
+      <div><b>${esc(k.label)}</b><div class="note">${esc(k.cost)} · <a href="${esc(k.url)}" target="_blank" rel="noopener">get a key</a></div></div>
+      <div><input type="password" autocomplete="off" spellcheck="false" data-key-env="${esc(k.env)}" placeholder="${k.set ? `saved ${esc(k.hint)} · paste to replace` : `${esc(k.env)}`}" style="width:100%"><div class="note" style="margin-top:3px">${esc(k.what)}${k.fromShell ? " (set in your shell environment, which overrides .env)" : ""}</div>${test[k.id] ? `<div class="note ${test[k.id].ok ? "up" : "down"}" style="margin-top:3px">${esc(test[k.id].busy ? "Testing…" : test[k.id].message)}</div>` : ""}</div>
+      <div class="row" style="flex-wrap:nowrap"><span class="chip ${k.set ? "good" : ""}">${k.set ? "set" : "missing"}</span><button class="btn sm" type="button" data-key-test="${esc(k.id)}" ${k.set ? "" : "disabled"}>Test</button>${k.set ? `<button class="btn sm ghost danger" type="button" data-key-clear="${esc(k.env)}">Remove</button>` : ""}</div></div>`).join("")}`).join("")
+    + `<p class="note" style="margin:10px 0 0">Connectors now: ${Object.entries(K.status || {}).map(([n, v]) => `${esc(n.replace(" MCP Server", ""))} <span class="${/needs|not/.test(v) ? "down" : "up"}">${esc(v)}</span>`).join(" · ")} · AI <span class="${K.ai ? "up" : "down"}">${K.ai ? "on" : "off"}</span></p>`;
+}
+async function saveKeys(values) {
+  $("#keysStatus").textContent = "Saving…";
+  try {
+    const r = await fetch("/api/keys", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ values }) }); const j = await r.json();
+    if (!r.ok) throw new Error(j.message);
+    S.keyInfo = { keys: j.keys, status: j.status, news: j.news, ai: j.ai }; $("#keysStatus").textContent = `Saved ${j.changed.length} key${j.changed.length === 1 ? "" : "s"}. Reloading…`;
+    setTimeout(() => location.reload(), 900);
+  } catch (e) { $("#keysStatus").textContent = e.message || "Couldn't save."; }
+}
+$("#keysSave").addEventListener("click", () => { const values = {}; for (const el of document.querySelectorAll("[data-key-env]")) if (el.value.trim()) values[el.dataset.keyEnv] = el.value.trim(); if (!Object.keys(values).length) { $("#keysStatus").textContent = "Paste a key first."; return; } saveKeys(values); });
+$("#keysBox").addEventListener("click", async (ev) => {
+  const c = ev.target.closest("[data-key-clear]"); if (c) { if (confirm(`Remove ${c.dataset.keyClear} from .env?`)) saveKeys({ [c.dataset.keyClear]: null }); return; }
+  const t = ev.target.closest("[data-key-test]"); if (!t) return; const id = t.dataset.keyTest;
+  S.keyTest = { ...(S.keyTest || {}), [id]: { busy: true } }; paintKeys();
+  try { const r = await fetch("/api/keys/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }); S.keyTest[id] = await r.json(); } catch (e) { S.keyTest[id] = { ok: false, message: "The server isn't reachable." }; }
+  paintKeys();
+});
+/* hand the collector lease back when this tab closes or reloads, so another (or the reloaded) tab takes over at once */
+addEventListener("pagehide", () => { if (S.holder && navigator.sendBeacon) navigator.sendBeacon("/api/db", JSON.stringify({ op: "acquire", path: "system/collector", holder: TAB_ID, ttlMs: 1000 })); });
 function clock() { const p = etParts(Date.now()); const z = (n) => String(n).padStart(2, "0"); $("#clock").textContent = `${p.wd} ${z(p.h)}:${z(p.m)}:${z(p.s)} ET`; }
 setInterval(clock, 1000); clock();
 

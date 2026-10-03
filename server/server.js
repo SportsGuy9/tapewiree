@@ -7,11 +7,14 @@ import { loadConfig, ROOT } from "./config.js";
 import { DocStore, DbError } from "./db.js";
 import { makeConnectors, ToolError } from "./connectors.js";
 import { makeAi } from "./ai.js";
+import { maskedKeys, writeKeys } from "./keys.js";
 
-const cfg = loadConfig();
+let cfg = loadConfig();
 const db = new DocStore(path.join(cfg.dataDir, "db"));
-const connectors = makeConnectors(cfg);
-const ai = makeAi(cfg);
+let connectors = makeConnectors(cfg);
+let ai = makeAi(cfg);
+/* keys saved from the setup page take effect without a restart */
+function reload() { const port = cfg.port, host = cfg.host, dataDir = cfg.dataDir; cfg = { ...loadConfig(), port, host, dataDir }; connectors = makeConnectors(cfg); ai = makeAi(cfg); }
 const PUBLIC = path.join(ROOT, "public");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
 
@@ -49,9 +52,24 @@ async function handle(req, res) {
   const url = new URL(req.url, "http://localhost");
   const p = url.pathname;
   try {
+    // only this app's own pages may change things: blocks other websites from posting to localhost (CSRF)
+    if (req.method !== "GET" && p.startsWith("/api/")) {
+      const origin = req.headers.origin; const site = req.headers["sec-fetch-site"];
+      if ((origin && new URL(origin).host !== req.headers.host) || (site && !["same-origin", "none"].includes(site))) return json(res, 403, { code: "forbidden", message: "Cross-site request refused" });
+    }
     if (p === "/api/env.js") {
       res.writeHead(200, { "content-type": "text/javascript", "cache-control": "no-store" });
-      res.end(`window.__TW=${JSON.stringify({ standalone: true, ai: ai.enabled, promptBudget: ai.promptBudget, connectors: connectors.status() })};`); return;
+      res.end(`window.__TW=${JSON.stringify({ standalone: true, ai: ai.enabled, promptBudget: ai.promptBudget, connectors: connectors.status(), news: connectors.news() })};`); return;
+    }
+    if (p === "/api/keys" && req.method === "GET") return json(res, 200, { keys: maskedKeys(cfg), status: connectors.status(), news: connectors.news(), ai: ai.enabled });
+    if (p === "/api/keys" && req.method === "POST") {
+      const b = await readBody(req, 64 * 1024);
+      try { const changed = writeKeys(b.values || {}); reload(); console.log(`[keys] updated ${changed.join(", ")}`); return json(res, 200, { changed, keys: maskedKeys(cfg), status: connectors.status(), news: connectors.news(), ai: ai.enabled }); }
+      catch (e) { return json(res, 400, { code: "invalid_argument", message: e.message }); }
+    }
+    if (p === "/api/keys/test" && req.method === "POST") {
+      const b = await readBody(req, 4096);
+      try { return json(res, 200, await connectors.test(String(b.id || ""))); } catch (e) { return json(res, 200, { ok: false, message: e.message }); }
     }
     if (p === "/api/status") return json(res, 200, { ai: ai.enabled, connectors: connectors.status(), db: { docs: db.docs.size, dir: db.dir } });
     if (p === "/api/db" && req.method === "POST") {

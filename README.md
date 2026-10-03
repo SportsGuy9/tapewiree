@@ -14,19 +14,33 @@ It started as a claude.ai artifact. This repository is the standalone version. I
    - **Linux / terminal:** `./start.sh`, or `npm install` then `npm start`
 4. Your browser opens **http://localhost:8787**. Leave the window running. The collector works while at least one Tapewire tab is open.
 
-On the first run the launcher creates a `.env` file. Add keys there, then restart:
+### API keys
+
+Open **Sources & keys → API keys & connectors**, paste keys and press **Save keys**. They are written to the local `.env` file and take effect right away; **Test** checks each one with a live call. (You can also edit `.env` directly; `.env.example` lists every key.)
 
 | Key | What it turns on | Cost |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Briefings, idea generation and its desk huddle, Ask the desk, event analysis, post-mortems, the context tree, the morning deep note | Pay per use ([console.anthropic.com](https://console.anthropic.com)) |
-| `TWELVEDATA_API_KEY` | Stock/ETF quotes and QQQ 5-minute bars (used for P&L marks and for measuring how the Nasdaq reacted to news) | Free tier |
+| `ANTHROPIC_API_KEY` | Briefings, idea generation and its desk huddle, Ask the desk, event analysis, post-mortems, the context tree, the morning deep note | Pay per use |
+| `TWELVEDATA_API_KEY` | Stock/ETF quotes and QQQ 5-minute bars: P&L marks and the Nasdaq reactions the news model learns from | Free tier |
+| `ALPACA_API_KEY_ID` + `ALPACA_API_SECRET` | The Benzinga real-time newswire | Free (Alpaca paper account) |
+| `FINNHUB_API_KEY` | Market news, company news for your watchlist; stock quotes if Twelve Data is missing | Free tier |
+| `POLYGON_API_KEY` | Ticker-tagged news with sentiment; 5-minute bars if Twelve Data is missing | Free tier |
+| `FMP_API_KEY` | Stock and general news; quotes and bars as a fallback | Free tier |
+| `MARKETAUX_API_KEY` | Entity-tagged news with sentiment | Free tier |
+| `TIINGO_API_KEY` | Ticker-tagged news | Free tier |
+| `NEWSAPI_API_KEY` | US business headlines from 80+ outlets | Free developer tier |
+| `BENZINGA_API_KEY` | Benzinga direct (skip if you use Alpaca) | Paid |
 | `ALPHAVANTAGE_API_KEY` | News with sentiment scores | Free tier (25 calls/day) |
-| `TAVILY_API_KEY` | An extra news search source (optional) | Free tier |
-| `FIRECRAWL_API_KEY` | Only used when a site blocks a direct fetch (optional) | Paid |
+| `TAVILY_API_KEY` | Extra news search | Free tier |
+| `FIRECRAWL_API_KEY` | Only used when a site blocks a direct fetch | Paid |
+| `COINMARKETCAP_API_KEY` | Crypto tab market structure via CoinMarketCap's MCP server | Free tier |
+| `BIGDATA_API_KEY` | Premium news search, tearsheet and calendar via Bigdata.com's MCP server | Paid |
+
+With no Twelve Data key, a Finnhub, FMP or Polygon key covers quotes and 5-minute bars instead. Each news API is paced to its free-tier limit.
 
 **Without any keys** these still work: 50+ news feeds (Bloomberg, CNBC, FT, ForexLive, Fed, ECB, BLS, Google News desks, crypto outlets, SEC 8-Ks, Nasdaq halts, StockTwits, Reddit), news search, Yahoo futures/index/yield/commodity quotes, Kalshi Fed odds, CNN Fear & Greed, FRED credit and liquidity, the earnings calendar, Treasury auctions, the economic calendar, Crypto.com prices and candles, the whole-market stock screen, the FX desk and SEC EDGAR data. These are all fetched directly and cost nothing.
 
-CoinMarketCap and Bigdata.com were claude.ai connectors with no free REST equivalent. To use them, copy `tapewire.config.example.json` to `tapewire.config.json` and fill in the `mcp` block with your key. Check the server URL and header name against the provider's MCP docs.
+CoinMarketCap and Bigdata.com are reached through their remote MCP servers once their key is set. The default addresses are `https://mcp.coinmarketcap.com/mcp` (header `X-CMC-MCP-API-KEY`) and `https://mcp.bigdata.com/` (header `X-API-KEY`). I couldn't verify them from here, so if Test fails, check the provider's MCP docs and set `COINMARKETCAP_MCP_URL` / `BIGDATA_MCP_URL`, or add a full `mcp` block in `tapewire.config.json`.
 
 ### AI model and cost
 
@@ -67,6 +81,25 @@ Each request can read up to `TAPEWIRE_PROMPT_KB` of the library (default 160 KB,
 - **Recall across all memory.** The new `recall_memory` tool searches daily digests, weeks, live and archived threads, every stored briefing, tree facts and leaves, themes, lessons, trade plans, release playbooks, deep notes and past ideas with their post-mortems. Ask the desk and the idea PM can call it, and Memory → Search shows its results.
 - **Backups.** The whole library is backed up to `data/db/backups` every day (the last 21 are kept). The **Memory store** card shows what is stored and lets you download a backup, back up now, or restore from a file.
 
+## The news learning system
+
+Every notable headline's market reaction is measured 15 minutes, 1 hour and 4 hours after it lands: NQ (or QQQ in cash hours), the 10-year yield, and each named stock's move relative to the Nasdaq. Each measurement is stored with the headline's text and context. Those records train a model (`public/newsmodel.js`):
+
+- **Features:** headline words and two-word phrases, outlet, feed or provider, category, tickers, topics (Fed, Powell, Iran, OPEC, AI, chips…), time of day and weekday, market regime (risk-on or off, volatility, yields), sentiment score, a built-in finance lexicon (beat/miss, hawkish/dovish…), novelty against older story threads, how many outlets confirmed it, data-release surprise size, opinion and watchlist flags, and interactions such as category × volatility.
+- **Targets, scaled by market volatility:** moves are divided by a trailing 30-day median, so a quiet week and a wild week are judged on the same scale. The model predicts:
+  - the chance of an NQ hour at least 1.5× normal
+  - the expected size of the move
+  - its direction
+  - the chance of a big 10-year yield move
+  - the chance a stock beats or lags the Nasdaq sharply
+- **Method:** sparse linear models over hashed features, trained with AdaGrad and L2 regularisation. Recent data counts more (half-life 60 days).
+- **Validation:**
+  - Walk-forward testing (3 expanding folds) on headlines the model never saw. Metrics: AUC, top-fifth precision, Spearman correlation, Brier score and calibration, each compared with the old rule-based score.
+  - A live record of predictions stamped on each headline as it arrived, scored after its reaction was measured.
+  - Champion/challenger: a retrain that tests clearly worse doesn't replace the model in use.
+- **Use:** once the model beats the rule score on unseen data, it adjusts every headline's importance by up to ±2.5 points. That changes alerts, story ranking, which articles get read in full, news-bus feed priority and the catalyst board. Each headline shows the model's odds, lean and the features that drove them. The model also suggests the alert threshold with the best precision/recall trade-off.
+- It retrains every 3 hours (or press **Retrain now**). Ask the desk, briefings and the idea generator read its findings. It needs about 80 measured headlines before it starts.
+
 ## Files
 
 ```
@@ -76,10 +109,13 @@ server/server.js      HTTP server and API routes
 server/db.js          document store (data/db/docs, one JSON file per document)
 server/connectors.js  data sources: direct adapters and optional remote MCP servers
 server/ai.js          Claude API (one streamed turn per request; the page runs the tool loop)
+server/news.js        keyed news APIs and price fallbacks, normalised
+server/keys.js        the API key registry, .env writer
+public/newsmodel.js   the news learning model (browser + Node)
 server/config.js      reads .env and tapewire.config.json
 ```
 
-`npm run check` runs an offline self-test of the store.
+`npm run check` runs offline tests: the store, the news model on synthetic data with a known signal, and every news provider's parsing against mocked responses.
 
 ## Notes and limits
 - Collection only happens while a Tapewire tab is open. The claude.ai background watcher, which collected while the page was closed and pushed alerts to your phone, does not exist here.
