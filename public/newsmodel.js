@@ -18,6 +18,8 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api; else root.TWNewsModel = api;
+  // loaded as a Web Worker: train off the page's main thread
+  if (typeof importScripts === "function" && typeof postMessage === "function") root.onmessage = (ev) => { try { postMessage({ ok: true, res: api.train(ev.data.recs, ev.data.opt || {}) }); } catch (e) { postMessage({ ok: false, error: String(e && e.message || e) }); } };
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
   const VERSION = 2;
@@ -195,14 +197,14 @@
   function train(recs, opt = {}) {
     const ds = buildDataset(recs);
     if (ds.length < (opt.minRows ?? 80)) return { status: "warming", n: ds.length, need: opt.minRows ?? 80 };
-    const folds = []; const K = 3; const start = Math.floor(ds.length * 0.55);
-    for (let k = 0; k < K; k++) {
-      const a = start + Math.floor(((ds.length - start) * k) / K), b = start + Math.floor(((ds.length - start) * (k + 1)) / K);
-      const tr = ds.slice(0, a), te = ds.slice(a, b); if (te.length < 10) continue;
-      folds.push(evaluate(trainHeads(tr, opt), te));
-    }
-    const metrics = avgMetrics(folds);
-    const H = trainHeads(ds, opt);
+    const K = 3; const start = Math.floor(ds.length * 0.55);
+    const walk = (o) => { const out = []; for (let k = 0; k < K; k++) { const a = start + Math.floor(((ds.length - start) * k) / K), b = start + Math.floor(((ds.length - start) * (k + 1)) / K); const tr = ds.slice(0, a), te = ds.slice(a, b); if (te.length < 10) continue; out.push(evaluate(trainHeads(tr, o), te)); } return out; };
+    // hyperparameters chosen by walk-forward AUC (regularisation x recency half-life) once there is enough data to tell them apart
+    const grid = ds.length >= 300 && opt.tune !== false ? [[5e-5, 30], [5e-5, 90], [2e-4, 30], [2e-4, 90], [1e-3, 30], [1e-3, 90]] : [[opt.l2 ?? 2e-4, (opt.half ?? 60 * DAYMS) / DAYMS]];
+    let best = null;
+    for (const [l2, half] of grid) { const o = { ...opt, l2, half: half * DAYMS }; const f = walk(o); const m = avgMetrics(f); if (!best || (m.auc ?? 0) > (best.m.auc ?? 0)) best = { o, f, m, l2, half }; }
+    const folds = best.f; const metrics = best.m; const hyper = { l2: best.l2, halfLifeDays: best.half, tried: grid.length };
+    const H = trainHeads(ds, best.o);
     const lift = (metrics.auc ?? 0.5) - (metrics.baseAuc ?? 0.5);
     const active = metrics.n >= 40 && (metrics.auc ?? 0) >= 0.55 && lift >= 0.015;
     const strength = active ? clamp(lift / 0.1, 0.3, 1) : 0;
@@ -216,18 +218,18 @@
       top[hk] = {}; for (const [f, arr] of Object.entries(fam)) { arr.sort((a, b) => b[1] - a[1]); top[hk][f] = { up: arr.slice(0, 12).filter((x) => x[1] > 0.01).map((x) => [x[0].replace(/^[^=]*=/, ""), round(x[1])]), down: arr.slice(-12).reverse().filter((x) => x[1] < -0.01).map((x) => [x[0].replace(/^[^=]*=/, ""), round(x[1])]) }; }
     }
     // suggested alert threshold: the importance level (rule score plus this model's adjustment) with the best F1 on the last fold's span
-    const tail = ds.slice(start); let best = null;
+    const tail = ds.slice(start); let bestThr = null;
     const tailH = tail.map((x) => x.h || (x.h = hashRow(x.f)));
     for (let thr = 5; thr <= 9.01; thr += 0.5) {
       let tp = 0, fp = 0, fn = 0;
       tail.forEach((x, i) => { const p = scoreHead(H.big, tailH[i]); const imp = clamp(x.ri + adjFrom(p, H.big?.pos, strength), 0, 10); const flag = imp >= thr; if (flag && x.big) tp++; else if (flag) fp++; else if (x.big) fn++; });
       const prec = tp + fp ? tp / (tp + fp) : 0, rec = tp + fn ? tp / (tp + fn) : 0, f1 = prec + rec ? (2 * prec * rec) / (prec + rec) : 0;
-      if (!best || f1 > best.f1) best = { thr: round(thr, 1), prec: round(prec), rec: round(rec), f1: round(f1) };
+      if (!bestThr || f1 > bestThr.f1) bestThr = { thr: round(thr, 1), prec: round(prec), rec: round(rec), f1: round(f1) };
     }
     // live track record: predictions stamped on headlines BEFORE their reaction was known (no hindsight at all)
     const lv = ds.filter((x) => Number.isFinite(x.r.pb)); const ld = lv.filter((x) => x.up != null && Number.isFinite(x.r.pu));
     const live = { n: lv.length, auc: lv.length >= 20 ? round(auc(lv.map((x) => x.r.pb), lv.map((x) => x.big))) : null, baseAuc: lv.length >= 20 ? round(auc(lv.map((x) => x.ri), lv.map((x) => x.big))) : null, dirN: ld.length, dirAcc: ld.length >= 15 ? round(ld.filter((x) => (x.r.pu >= 0.5 ? 1 : 0) === x.up).length / ld.length) : null };
-    return { status: "trained", version: VERSION, live, t: Date.now(), n: ds.length, folds: folds.length, metrics, active, ok, strength: round(strength), heads: packHeads(H), top, threshold: best, scale: { nq: round(median(ds.map((x) => Math.abs(x.r.m1))), 3) } };
+    return { status: "trained", version: VERSION, live, hyper, t: Date.now(), n: ds.length, folds: folds.length, metrics, active, ok, strength: round(strength), heads: packHeads(H), top, threshold: bestThr, scale: { nq: round(median(ds.map((x) => Math.abs(x.r.m1))), 3) } };
   }
   const median = (a) => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
   function adjFrom(p, base, strength) { if (p == null || !strength) return 0; return clamp((logit(p) - logit(base || 0.2)) * 0.9 * strength, -2.5, 2.5); }

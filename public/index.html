@@ -2535,6 +2535,17 @@ function modelPredict(e) {
   if (key) { if (_pred.size > 30000) _pred.clear(); _pred.set(key, p); }
   return p;
 }
+/* training runs in a Web Worker so the page never freezes; falls back to the main thread where workers aren't available */
+function trainOffThread(recs) {
+  if (typeof Worker === "undefined") return Promise.resolve(TWNewsModel.train(recs));
+  return new Promise((resolve, reject) => {
+    const w = new Worker("/newsmodel.js"); const done = (fn) => (x) => { w.terminate(); fn(x); };
+    const timer = setTimeout(done(reject), 10 * MIN, new Error("Training timed out"));
+    w.onmessage = (ev) => { clearTimeout(timer); ev.data.ok ? done(resolve)(ev.data.res) : done(reject)(new Error(ev.data.error)); };
+    w.onerror = (e) => { clearTimeout(timer); done(reject)(new Error(e.message || "Training worker failed")); };
+    w.postMessage({ recs });
+  });
+}
 async function trainNewsModel2(force) {
   if (!window.TWNewsModel || !S.db || !S.loaded.model2) return null;
   const now = Date.now(); if (!force && now - (S.newsModel2?.t || 0) < 3 * HOUR) return null;
@@ -2544,7 +2555,7 @@ async function trainNewsModel2(force) {
     const e = evById.get(id); const title = r.h || e?.title; if (!title) continue; const tk = r.tk || e?.tk || [];
     recs.push({ t: r.t, title, cls: r.c, outlet: outletKey(r.o || e?.outlet || r.src || ""), src: r.src, fd: r.fd, tk, ents: entitiesOf({ title, sum: "", tk }), sent: r.s, ri: r.ri ?? e?.ri ?? r.i, so: r.so ?? 1, nv: r.nv ?? e?.nv ?? 0, cal: r.cal ?? e?.cal ?? null, rg: r.rg ?? e?.rg ?? null, op: r.op ?? (e?.op ? 1 : 0), w: r.w ?? e?.w ?? 0, m1, y10: h1.Y10 ?? null, ab: h1.S ? Object.values(h1.S)[0] : null, pb: r.pb ?? e?.pb ?? null, pu: r.pu ?? e?.pu ?? null });
   }
-  const res = TWNewsModel.train(recs); const prev = S.newsModel2?.heads ? S.newsModel2 : null;
+  const res = await trainOffThread(recs); const prev = S.newsModel2?.heads ? S.newsModel2 : null;
   let doc;
   if (res.status !== "trained") doc = { ...(prev || {}), status: prev ? prev.status : "warming", t: now, warming: { n: res.n, need: res.need }, history: prev?.history || [] };
   else {
@@ -7197,18 +7208,19 @@ function paintThreadsMemory() {
 }
 function model2HTML() {
   const M = S.newsModel2; const busy = S.m2Busy; const pc = (v) => (v == null ? "—" : Math.round(v * 100) + "%"); const f2 = (v) => (v == null ? "—" : (+v).toFixed(2));
-  const head = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Trained model</b><span class="row">${M?.t ? `<span class="note">trained ${esc(ago(M.t))}</span>` : ""}<button class="btn sm" type="button" data-m2-retrain ${busy || !S.holder ? "disabled" : ""} title="${S.holder ? "" : "Only the collecting tab trains"}">${busy ? "Training…" : "Retrain now"}</button></span></div>`;
+  const head = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Trained model</b><span class="row">${M?.t ? `<span class="note">trained ${esc(ago(M.t))}</span>` : ""}<button class="btn sm" type="button" data-m2-retrain ${busy ? "disabled" : ""}>${busy ? "Training…" : "Retrain now"}</button></span></div>`;
   const intro = `<p class="note" style="margin:0 0 8px">A machine-learned model trained on every headline whose Nasdaq reaction Tapewire has measured: its words and phrases, outlet, feed, category, tickers, topics, time of day, market regime, tone, novelty, how many outlets confirmed it and any data surprise. Moves are scaled by how volatile the market was at the time. It predicts the chance of an outsized NQ hour, the size and direction of the move, big 10-year moves, and how far a stock beats or lags the Nasdaq. It is tested walk-forward on headlines it never saw, and it only changes importance scores while it beats the rule-based score.</p>`;
   if (!M?.metrics) return head + intro + `<p class="note" style="margin:0 0 12px">${M?.warming ? `Warming up: ${M.warming.n} of the ${M.warming.need} measured headlines it needs. Reactions are measured during US hours while Tapewire is open.` : "Not trained yet."}</p>`;
   const m = M.metrics; const row = (lab, a, b, good) => `<tr><td>${lab}</td><td><b class="${good == null ? "" : good ? "up" : "down"}">${a}</b></td><td>${b}</td></tr>`;
-  const tbl = `<div class="md"><div class="tbl"><table><tr><th>Out-of-sample test (${m.n} headlines, ${M.folds} walk-forward folds)</th><th>Model</th><th>Rule score</th></tr>
+  const tbl = `<div class="md"><div class="tbl"><table><tr><th>Tested on unseen headlines</th><th>Model</th><th>Rule score</th></tr>
     ${row("Finds headlines that move NQ ≥1.5× a normal hour (AUC; 0.5 = coin flip)", f2(m.auc), f2(m.baseAuc), m.auc != null && m.baseAuc != null ? m.auc > m.baseAuc : null)}
     ${row("Hit rate of its top fifth of headlines", pc(m.precTop), pc(m.precTopBase), m.precTop != null ? m.precTop > (m.precTopBase ?? 0) : null)}
     ${row("Ranks the size of the move (Spearman)", f2(m.spearman), f2(m.spearmanBase), m.spearman != null ? m.spearman > (m.spearmanBase ?? 0) : null)}
     ${row("Probability error (Brier; lower is better)", f2(m.brier), `${f2(m.brierBase)} (base rate)`, m.brier != null ? m.brier < m.brierBase : null)}
     ${row(`Direction of meaningful moves (${m.dirN || 0} cases)`, pc(m.dirAcc), `${pc(m.dirBase)} (usual side)`, m.dirAcc != null ? m.dirAcc > (m.dirBase ?? 0.5) : null)}
     ${m.ratesAuc != null ? row("Big 10-year yield moves (AUC)", f2(m.ratesAuc), "0.50", m.ratesAuc > 0.55) : ""}${m.stockAuc != null ? row("Stock beats/lags the Nasdaq sharply (AUC)", f2(m.stockAuc), "0.50", m.stockAuc > 0.55) : ""}</table></div></div>`;
-  const status = `<p style="margin:6px 0"><span class="chip ${M.active ? "good" : ""}">${M.active ? `Applied · strength ${M.strength}` : "Not applied yet"}</span> <span class="note">${M.active ? `Adds up to ±${(2.5 * M.strength).toFixed(1)} importance points per headline, replacing the old category and outlet weights.` : "It needs an AUC of at least 0.55 that beats the rule score by 0.015 on unseen headlines. Until then the old category and outlet weights apply."}${M.lastRejected ? ` The last retrain (${esc(ago(M.lastRejected.t))}) tested worse, so the previous model was kept.` : ""}</span></p>`;
+  const how = `<p class="note" style="margin:6px 0 0">${m.n} out-of-sample headlines over ${M.folds} walk-forward folds${M.hyper ? ` · tuned over ${M.hyper.tried} settings: L2 ${M.hyper.l2}, recency half-life ${M.hyper.halfLifeDays} days` : ""}.</p>`;
+  const status = how + `<p style="margin:6px 0"><span class="chip ${M.active ? "good" : ""}">${M.active ? `Applied · strength ${M.strength}` : "Not applied yet"}</span> <span class="note">${M.active ? `Adds up to ±${(2.5 * M.strength).toFixed(1)} importance points per headline, replacing the old category and outlet weights.` : "It needs an AUC of at least 0.55 that beats the rule score by 0.015 on unseen headlines. Until then the old category and outlet weights apply."}${M.lastRejected ? ` The last retrain (${esc(ago(M.lastRejected.t))}) tested worse, so the previous model was kept.` : ""}</span></p>`;
   const lv = M.live; const live = lv?.n ? `<p class="note" style="margin:8px 0 0"><b style="color:var(--ink)">Live record</b> (predictions stamped on each headline as it arrived, scored once its reaction was measured): ${lv.auc != null ? `AUC <b>${f2(lv.auc)}</b> vs rule score ${f2(lv.baseAuc)} over ${lv.n} headlines${lv.dirAcc != null ? `, direction ${pc(lv.dirAcc)} of ${lv.dirN}` : ""}` : `${lv.n} headlines so far, needs 20 to score`}.</p>` : "";
   const cal = live + ((m.calib || []).length ? `<div class="note" style="margin:8px 0 4px">Calibration: predicted vs actual share of big moves, by prediction bucket</div><div class="daybars">${m.calib.map((c) => `<div><span class="muted">pred ${pc(c.p)}</span><i style="width:${Math.max(2, c.y * 100)}%"></i><span class="num">${pc(c.y)}</span></div>`).join("")}</div>` : "");
   const fam = (h, f, dir, n = 10) => (M.top?.[h]?.[f]?.[dir] || []).slice(0, n).map((x) => `<span class="tk">${esc(x[0].replace(/_/g, " ").replace(/&/g, " + "))}</span>`).join(" ") || '<span class="muted">—</span>';

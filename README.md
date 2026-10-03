@@ -92,7 +92,7 @@ Every notable headline's market reaction is measured 15 minutes, 1 hour and 4 ho
   - its direction
   - the chance of a big 10-year yield move
   - the chance a stock beats or lags the Nasdaq sharply
-- **Method:** sparse linear models over hashed features, trained with AdaGrad and L2 regularisation. Recent data counts more (half-life 60 days).
+- **Method:** sparse linear models over hashed features, trained with AdaGrad and L2 regularisation, with recent data weighted more. Regularisation strength and the recency half-life are tuned automatically by walk-forward validation. Training runs in a background Web Worker, so the page never freezes.
 - **Validation:**
   - Walk-forward testing (3 expanding folds) on headlines the model never saw. Metrics: AUC, top-fifth precision, Spearman correlation, Brier score and calibration, each compared with the old rule-based score.
   - A live record of predictions stamped on each headline as it arrived, scored after its reaction was measured.
