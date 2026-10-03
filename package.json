@@ -1,0 +1,17 @@
+{
+  "name": "tapewire",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tapewire market memory desk, as a standalone local website",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "check": "node --check server/server.js && node server/selftest.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0"
+  }
+}

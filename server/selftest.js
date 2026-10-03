@@ -1,0 +1,32 @@
+// Offline checks for the local store and helpers: `npm run check`
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DocStore } from "./db.js";
+import { htmlToText } from "./connectors.js";
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tw-selftest-"));
+const db = new DocStore(dir);
+db.set("days/2026-10-01", { day: "2026-10-01", events: [1] });
+db.set("days/2026-10-02", { day: "2026-10-02", events: [1, 2] });
+db.set("days/2026-10-02-p2", { day: "2026-10-02", part: 2, events: [] });
+assert.equal(db.query("days", { orderBy: ["day", "desc"], limit: 2 })[0].data.day, "2026-10-02");
+assert.equal(db.query("days", { where: [["day", ">=", "2026-10-02"]] }).length, 2);
+db.update("days/2026-10-01", { meta: { a: 1 } }); db.update("days/2026-10-01", { meta: { b: 2 } });
+assert.deepEqual(db.get("days/2026-10-01").data.meta, { a: 1, b: 2 });
+assert.throws(() => db.update("days/missing", { x: 1 }));
+assert.throws(() => db.set("bad", {}));
+assert.equal(db.acquire("system/collector", { holder: "A" }).acquired, true);
+assert.equal(db.acquire("system/collector", { holder: "B" }).acquired, false);
+assert.equal(db.acquire("system/collector", { holder: "A" }).acquired, true);
+db.delete("days/2026-10-02-p2"); assert.equal(db.get("days/2026-10-02-p2").exists, false);
+db.flushAll();
+const again = new DocStore(dir);
+assert.equal(again.docs.size, 2, "documents persist across restarts");
+const name = again.backup(); assert.ok(fs.existsSync(path.join(dir, "backups", name)));
+const fresh = new DocStore(fs.mkdtempSync(path.join(os.tmpdir(), "tw-selftest-")));
+assert.equal(fresh.restore(again.dump()), 2);
+assert.match(htmlToText("<html><body><nav>menu</nav><p>Hello &amp; welcome</p><script>x()</script></body></html>"), /^Hello & welcome$/);
+fs.rmSync(dir, { recursive: true, force: true });
+console.log("selftest ok");

@@ -1,0 +1,15 @@
+{
+  "_readme": "Optional. Copy to tapewire.config.json. Keys in .env win over anything here.",
+  "port": 8787,
+  "anthropic": {
+    "model": "claude-opus-5-5",
+    "effort": { "quick": "low", "default": "medium", "complex": "high" },
+    "promptBudgetKB": 160,
+    "fallbacks": true
+  },
+  "mcp": {
+    "CoinMarketCap": { "url": "https://mcp.coinmarketcap.com/mcp", "headers": { "X-CMC-MCP-API-KEY": "your-coinmarketcap-key" }, "enabled": false },
+    "Bigdata.com": { "url": "https://mcp.bigdata.com/", "headers": { "X-API-KEY": "your-bigdata-key" }, "enabled": false }
+  },
+  "backupsKeep": 21
+}
