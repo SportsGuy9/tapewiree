@@ -144,13 +144,6 @@
   "kind": "rss"
  },
  {
-  "id": "nb:sec",
-  "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=40&output=atom",
-  "group": "news",
-  "kind": "raw",
-  "ua": "contact"
- },
- {
   "id": "nb:fedp",
   "url": "https://www.federalreserve.gov/feeds/press_all.xml",
   "group": "news",
@@ -167,13 +160,6 @@
   "url": "https://www.ecb.europa.eu/rss/press.html",
   "group": "news",
   "kind": "rss"
- },
- {
-  "id": "nb:bls",
-  "url": "https://www.bls.gov/feed/bls_latest.rss",
-  "group": "news",
-  "kind": "rss",
-  "ua": "contact"
  },
  {
   "id": "nb:oil",
@@ -365,43 +351,43 @@
  {
   "id": "cx:cb",
   "url": "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:oks",
   "url": "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:cg",
   "url": "https://api.coingecko.com/api/v3/global",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:cgm",
   "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=7d",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:fut",
   "url": "https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=future",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:fng",
   "url": "https://api.alternative.me/fng/?limit=10",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:opt",
   "url": "https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json",
   "pick": {
    "path": "result",
@@ -418,19 +404,19 @@
  {
   "id": "cx:cgt",
   "url": "https://api.coingecko.com/api/v3/search/trending",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:fh",
   "url": "https://www.okx.com/api/v5/public/funding-rate-history?instId=BTC-USDT-SWAP&limit=60",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:stb",
   "url": "https://stablecoins.llama.fi/stablecoins?includePrices=false",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json",
   "pick": {
    "path": "peggedAssets",
@@ -495,133 +481,133 @@
  {
   "id": "cx:bnGl",
   "url": "https://www.binance.com/futures/data/globalLongShortAccountRatio?symbol=BTCUSDT&period=1h&limit=48",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:kpE",
   "url": "https://www.binance.com/fapi/v1/klines?symbol=ETHUSDT&interval=5m&limit=288",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:ksE",
   "url": "https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT&interval=5m&limit=288",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:bnOIE",
   "url": "https://www.binance.com/futures/data/openInterestHist?symbol=ETHUSDT&period=1h&limit=48",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:cexs",
   "url": "https://api.llama.fi/cexs",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:v_cb",
   "url": "https://api.coinbase.com/api/v3/brokerage/market/products?product_ids=BTC-USD&product_ids=ETH-USD&product_ids=SOL-USD",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:v_bn",
   "url": "https://data-api.binance.vision/api/v3/ticker/price?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22,%22SOLUSDT%22%5D",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:v_kr",
   "url": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD,SOLUSD",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:v_bf",
   "url": "https://api-pub.bitfinex.com/v2/tickers?symbols=tBTCUSD,tETHUSD,tSOLUSD",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:v_up",
   "url": "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH,KRW-SOL",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:v_bs",
   "url": "https://www.bitstamp.net/api/v2/ticker/btcusd/",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:v_gm",
   "url": "https://api.gemini.com/v1/pubticker/btcusd",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:annBL",
   "url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=10&catalogId=48",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:annBD",
   "url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=10&catalogId=161",
-  "group": "crypto",
+  "group": "cx4h",
   "kind": "json"
  },
  {
   "id": "cx:annOL",
   "url": "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:annOD",
   "url": "https://www.okx.com/api/v5/support/announcements?annType=announcements-delistings",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:mpf",
   "url": "https://mempool.space/api/v1/fees/recommended",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:bcb",
   "url": "https://api.blockchair.com/bitcoin/stats",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:bce",
   "url": "https://api.blockchair.com/ethereum/stats",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:mpd",
   "url": "https://mempool.space/api/v1/difficulty-adjustment",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:mph",
   "url": "https://mempool.space/api/v1/mining/hashrate/1m",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:tvl",
   "url": "https://api.llama.fi/v2/historicalChainTvl",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json",
   "pick": {
    "tail": 400
@@ -630,13 +616,13 @@
  {
   "id": "cx:chn",
   "url": "https://api.llama.fi/v2/chains",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
   "id": "cx:stc",
   "url": "https://stablecoins.llama.fi/stablecoinchains",
-  "group": "crypto",
+  "group": "cxslow",
   "kind": "json"
  },
  {
