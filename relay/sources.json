@@ -1,0 +1,650 @@
+[
+ {
+  "id": "nb:fxl",
+  "url": "https://www.forexlive.com/feed/news",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:bbg",
+  "url": "https://feeds.bloomberg.com/markets/news.rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:mw",
+  "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:sa",
+  "url": "https://seekingalpha.com/market_currents.xml",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:fxs",
+  "url": "https://www.fxstreet.com/rss/news",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:tt",
+  "url": "https://www.trumpstruth.org/feed",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:halt",
+  "url": "https://www.nasdaqtrader.com/rss.aspx?feed=tradehalts",
+  "group": "news",
+  "kind": "raw"
+ },
+ {
+  "id": "nb:grtr",
+  "url": "https://news.google.com/rss/search?q=site%3Areuters.com%20(markets%20OR%20business%20OR%20economy%20OR%20technology%20OR%20world)%20when%3A2h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gwsj",
+  "url": "https://news.google.com/rss/search?q=site%3Awsj.com%20(markets%20OR%20economy%20OR%20business%20OR%20tech)%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gap",
+  "url": "https://news.google.com/rss/search?q=site%3Aapnews.com%20(business%20OR%20economy%20OR%20stocks%20OR%20markets)%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gmk",
+  "url": "https://news.google.com/rss/search?q=%22Nasdaq%22%20OR%20%22Wall%20Street%22%20OR%20%22stock%20futures%22%20when%3A2h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gfed",
+  "url": "https://news.google.com/rss/search?q=%22Federal%20Reserve%22%20OR%20%22Treasury%20yields%22%20OR%20inflation%20OR%20Powell%20OR%20Warsh%20when%3A2h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gmeg",
+  "url": "https://news.google.com/rss/search?q=Nvidia%20OR%20Microsoft%20OR%20Apple%20OR%20Amazon%20OR%20Meta%20OR%20Alphabet%20OR%20Tesla%20OR%20Broadcom%20OR%20Micron%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:ggeo",
+  "url": "https://news.google.com/rss/search?q=oil%20OR%20Iran%20OR%20Hormuz%20OR%20tariffs%20OR%20sanctions%20markets%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gern",
+  "url": "https://news.google.com/rss/search?q=(earnings%20OR%20%22raises%20guidance%22%20OR%20%22cuts%20guidance%22%20OR%20%22raises%20forecast%22%20OR%20%22cuts%20forecast%22)%20stock%20when%3A2h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gana",
+  "url": "https://news.google.com/rss/search?q=upgrade%20OR%20downgrade%20OR%20%22price%20target%22%20stock%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gsemi",
+  "url": "https://news.google.com/rss/search?q=semiconductor%20OR%20chipmaker%20OR%20HBM%20OR%20TSMC%20OR%20%22AI%20chips%22%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gma",
+  "url": "https://news.google.com/rss/search?q=%22to%20acquire%22%20OR%20merger%20OR%20takeover%20OR%20buyout%20when%3A4h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:ft",
+  "url": "https://www.ft.com/markets?format=rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:cnbc",
+  "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:cnbce",
+  "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:cnbct",
+  "url": "https://www.cnbc.com/id/19854910/device/rss/rss.html",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:inve",
+  "url": "https://www.investing.com/rss/news_14.rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:invs",
+  "url": "https://www.investing.com/rss/news_25.rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:sec",
+  "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=40&output=atom",
+  "group": "news",
+  "kind": "raw"
+ },
+ {
+  "id": "nb:fedp",
+  "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:feds",
+  "url": "https://www.federalreserve.gov/feeds/speeches.xml",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:ecb",
+  "url": "https://www.ecb.europa.eu/rss/press.html",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:bls",
+  "url": "https://www.bls.gov/feed/bls_latest.rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:oil",
+  "url": "https://oilprice.com/rss/main",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:ilcb",
+  "url": "https://www.investinglive.com/feed/centralbanks",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:fxsa",
+  "url": "https://www.fxstreet.com/rss/analysis",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:invfx",
+  "url": "https://www.investing.com/rss/news_1.rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:boe",
+  "url": "https://www.bankofengland.co.uk/rss/news",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:boj",
+  "url": "https://www.boj.or.jp/en/rss/whatsnew.xml",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:snb",
+  "url": "https://www.snb.ch/public/en/rss/pressrel",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:rbnz",
+  "url": "https://www.rbnz.govt.nz/feeds/news",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gjpy",
+  "url": "https://news.google.com/rss/search?q=yen%20OR%20%22Bank%20of%20Japan%22%20OR%20BOJ%20OR%20%22currency%20intervention%22%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:geur",
+  "url": "https://news.google.com/rss/search?q=euro%20OR%20ECB%20OR%20Lagarde%20OR%20%22EUR%2FUSD%22%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:ggbp",
+  "url": "https://news.google.com/rss/search?q=sterling%20OR%20pound%20OR%20%22Bank%20of%20England%22%20OR%20%22GBP%2FUSD%22%20when%3A4h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gcomm",
+  "url": "https://news.google.com/rss/search?q=%22Australian%20dollar%22%20OR%20RBA%20OR%20%22New%20Zealand%20dollar%22%20OR%20RBNZ%20OR%20%22Canadian%20dollar%22%20OR%20%22Bank%20of%20Canada%22%20when%3A4h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:gusd",
+  "url": "https://news.google.com/rss/search?q=%22dollar%20index%22%20OR%20%22U.S.%20dollar%22%20OR%20greenback%20OR%20forex%20when%3A3h&hl=en-US&gl=US&ceid=US:en",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:cd",
+  "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:ctg",
+  "url": "https://cointelegraph.com/rss",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:tbk",
+  "url": "https://www.theblock.co/rss.xml",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:dcr",
+  "url": "https://decrypt.co/feed",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:bwk",
+  "url": "https://blockworks.co/feed",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:btm",
+  "url": "https://bitcoinmagazine.com/feed",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:csl",
+  "url": "https://cryptoslate.com/feed/",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:dft",
+  "url": "https://thedefiant.io/api/feed",
+  "group": "news",
+  "kind": "rss"
+ },
+ {
+  "id": "nb:st",
+  "url": "https://api.stocktwits.com/api/2/trending/symbols.json",
+  "group": "news",
+  "kind": "raw"
+ },
+ {
+  "id": "nb:wsb",
+  "url": "https://www.reddit.com/r/wallstreetbets/hot.json?limit=25",
+  "group": "news",
+  "kind": "raw"
+ },
+ {
+  "id": "nb:rst",
+  "url": "https://www.reddit.com/r/stocks/hot.json?limit=20",
+  "group": "news",
+  "kind": "raw"
+ },
+ {
+  "id": "cx:fund",
+  "url": "https://www.okx.com/api/v5/public/funding-rate?instId=ANY",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:liqB",
+  "url": "https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=BTC-USDT&state=filled",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:oko",
+  "url": "https://www.okx.com/api/v5/public/open-interest?instType=SWAP",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:oiv",
+  "url": "https://www.okx.com/api/v5/rubik/stat/contracts/open-interest-volume?ccy=BTC&period=1H",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:tk",
+  "url": "https://www.okx.com/api/v5/rubik/stat/taker-volume?ccy=BTC&instType=CONTRACTS&period=1H",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:ls",
+  "url": "https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy=BTC&period=1H",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:liqE",
+  "url": "https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=ETH-USDT&state=filled",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:etfB",
+  "url": "https://farside.co.uk/btc/",
+  "group": "crypto",
+  "kind": "html"
+ },
+ {
+  "id": "cx:cb",
+  "url": "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:oks",
+  "url": "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:cg",
+  "url": "https://api.coingecko.com/api/v3/global",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:cgm",
+  "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=7d",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:fut",
+  "url": "https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=future",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:etfE",
+  "url": "https://farside.co.uk/eth/",
+  "group": "crypto",
+  "kind": "html"
+ },
+ {
+  "id": "cx:fng",
+  "url": "https://api.alternative.me/fng/?limit=10",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:opt",
+  "url": "https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:cgt",
+  "url": "https://api.coingecko.com/api/v3/search/trending",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:fh",
+  "url": "https://www.okx.com/api/v5/public/funding-rate-history?instId=BTC-USDT-SWAP&limit=60",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:stb",
+  "url": "https://stablecoins.llama.fi/stablecoins?includePrices=false",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bnp",
+  "url": "https://www.binance.com/fapi/v1/premiumIndex",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:kpB",
+  "url": "https://www.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=288",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:ksB",
+  "url": "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=288",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bnOI",
+  "url": "https://www.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=1h&limit=48",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bnTop",
+  "url": "https://www.binance.com/futures/data/topLongShortPositionRatio?symbol=BTCUSDT&period=1h&limit=48",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bnTk",
+  "url": "https://www.binance.com/futures/data/takerlongshortRatio?symbol=BTCUSDT&period=1h&limit=48",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bnGl",
+  "url": "https://www.binance.com/futures/data/globalLongShortAccountRatio?symbol=BTCUSDT&period=1h&limit=48",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:kpE",
+  "url": "https://www.binance.com/fapi/v1/klines?symbol=ETHUSDT&interval=5m&limit=288",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:ksE",
+  "url": "https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT&interval=5m&limit=288",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bnOIE",
+  "url": "https://www.binance.com/futures/data/openInterestHist?symbol=ETHUSDT&period=1h&limit=48",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:cexs",
+  "url": "https://api.llama.fi/cexs",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_cb",
+  "url": "https://api.coinbase.com/api/v3/brokerage/market/products?product_ids=BTC-USD&product_ids=ETH-USD&product_ids=SOL-USD",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_bn",
+  "url": "https://data-api.binance.vision/api/v3/ticker/price?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22,%22SOLUSDT%22%5D",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_kr",
+  "url": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD,SOLUSD",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_bf",
+  "url": "https://api-pub.bitfinex.com/v2/tickers?symbols=tBTCUSD,tETHUSD,tSOLUSD",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_up",
+  "url": "https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH,KRW-SOL",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_krw",
+  "url": "https://query1.finance.yahoo.com/v7/finance/spark?symbols=KRW%3DX&range=1d&interval=1d",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_bs",
+  "url": "https://www.bitstamp.net/api/v2/ticker/btcusd/",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:v_gm",
+  "url": "https://api.gemini.com/v1/pubticker/btcusd",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:annBL",
+  "url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=10&catalogId=48",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:annBD",
+  "url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=10&catalogId=161",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:annOL",
+  "url": "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:annOD",
+  "url": "https://www.okx.com/api/v5/support/announcements?annType=announcements-delistings",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:mpf",
+  "url": "https://mempool.space/api/v1/fees/recommended",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bcb",
+  "url": "https://api.blockchair.com/bitcoin/stats",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:bce",
+  "url": "https://api.blockchair.com/ethereum/stats",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:mpd",
+  "url": "https://mempool.space/api/v1/difficulty-adjustment",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:mph",
+  "url": "https://mempool.space/api/v1/mining/hashrate/1m",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:tvl",
+  "url": "https://api.llama.fi/v2/historicalChainTvl",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:chn",
+  "url": "https://api.llama.fi/v2/chains",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:stc",
+  "url": "https://stablecoins.llama.fi/stablecoinchains",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:dvB",
+  "dyn": "dvol:BTC",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "cx:dvE",
+  "dyn": "dvol:ETH",
+  "group": "crypto",
+  "kind": "json"
+ },
+ {
+  "id": "fx:cal",
+  "url": "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
+  "group": "fx",
+  "kind": "json"
+ },
+ {
+  "id": "ast:t24",
+  "url": "https://fapi.asterdex.com/fapi/v1/ticker/24hr",
+  "group": "aster",
+  "kind": "json"
+ },
+ {
+  "id": "ast:prem",
+  "url": "https://fapi.asterdex.com/fapi/v1/premiumIndex",
+  "group": "aster",
+  "kind": "json"
+ }
+]

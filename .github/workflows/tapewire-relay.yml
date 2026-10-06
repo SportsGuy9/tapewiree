@@ -1,0 +1,42 @@
+name: Tapewire relay
+
+# Fetches the feeds and market endpoints the Tapewire page reads, trims them and publishes compact bundles to the
+# "feeds" branch (one commit, overwritten each run). The page reads them from raw.githubusercontent.com.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tapewire-relay
+  cancel-in-progress: false
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: relay
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch and bundle
+        run: node relay/scrape.mjs out
+      - name: Publish to the feeds branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          printf '# Tapewire relay output\nOverwritten every run by .github/workflows/tapewire-relay.yml. status.json lists every source.\n' > README.md
+          git init -q -b feeds
+          git config user.name "tapewire-relay"
+          git config user.email "tapewire-relay@users.noreply.github.com"
+          git add -A
+          git commit -q -m "relay $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" feeds:feeds
