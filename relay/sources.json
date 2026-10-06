@@ -147,7 +147,8 @@
   "id": "nb:sec",
   "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&count=40&output=atom",
   "group": "news",
-  "kind": "raw"
+  "kind": "raw",
+  "ua": "contact"
  },
  {
   "id": "nb:fedp",
@@ -171,7 +172,8 @@
   "id": "nb:bls",
   "url": "https://www.bls.gov/feed/bls_latest.rss",
   "group": "news",
-  "kind": "rss"
+  "kind": "rss",
+  "ua": "contact"
  },
  {
   "id": "nb:oil",
@@ -306,22 +308,23 @@
   "kind": "raw"
  },
  {
-  "id": "nb:wsb",
-  "url": "https://www.reddit.com/r/wallstreetbets/hot.json?limit=25",
-  "group": "news",
-  "kind": "raw"
- },
- {
-  "id": "nb:rst",
-  "url": "https://www.reddit.com/r/stocks/hot.json?limit=20",
-  "group": "news",
-  "kind": "raw"
- },
- {
   "id": "cx:fund",
   "url": "https://www.okx.com/api/v5/public/funding-rate?instId=ANY",
   "group": "crypto",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "path": "data",
+   "fields": [
+    "instId",
+    "fundingRate",
+    "fundingTime",
+    "prevFundingTime"
+   ],
+   "match": [
+    "instId",
+    "-USDT-SWAP$"
+   ]
+  }
  },
  {
   "id": "cx:liqB",
@@ -360,12 +363,6 @@
   "kind": "json"
  },
  {
-  "id": "cx:etfB",
-  "url": "https://farside.co.uk/btc/",
-  "group": "crypto",
-  "kind": "html"
- },
- {
   "id": "cx:cb",
   "url": "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
   "group": "crypto",
@@ -396,12 +393,6 @@
   "kind": "json"
  },
  {
-  "id": "cx:etfE",
-  "url": "https://farside.co.uk/eth/",
-  "group": "crypto",
-  "kind": "html"
- },
- {
   "id": "cx:fng",
   "url": "https://api.alternative.me/fng/?limit=10",
   "group": "crypto",
@@ -411,7 +402,18 @@
   "id": "cx:opt",
   "url": "https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option",
   "group": "crypto",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "path": "result",
+   "fields": [
+    "instrument_name",
+    "mark_iv",
+    "open_interest",
+    "underlying_price",
+    "volume",
+    "estimated_delivery_price"
+   ]
+  }
  },
  {
   "id": "cx:cgt",
@@ -429,13 +431,36 @@
   "id": "cx:stb",
   "url": "https://stablecoins.llama.fi/stablecoins?includePrices=false",
   "group": "crypto",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "path": "peggedAssets",
+   "fields": [
+    "name",
+    "symbol",
+    "circulating",
+    "circulatingPrevDay",
+    "circulatingPrevWeek",
+    "circulatingPrevMonth"
+   ]
+  }
  },
  {
   "id": "cx:bnp",
   "url": "https://www.binance.com/fapi/v1/premiumIndex",
   "group": "crypto",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "fields": [
+    "symbol",
+    "lastFundingRate",
+    "markPrice",
+    "indexPrice"
+   ],
+   "match": [
+    "symbol",
+    "USDT$"
+   ]
+  }
  },
  {
   "id": "cx:kpB",
@@ -528,12 +553,6 @@
   "kind": "json"
  },
  {
-  "id": "cx:v_krw",
-  "url": "https://query1.finance.yahoo.com/v7/finance/spark?symbols=KRW%3DX&range=1d&interval=1d",
-  "group": "crypto",
-  "kind": "json"
- },
- {
   "id": "cx:v_bs",
   "url": "https://www.bitstamp.net/api/v2/ticker/btcusd/",
   "group": "crypto",
@@ -603,7 +622,10 @@
   "id": "cx:tvl",
   "url": "https://api.llama.fi/v2/historicalChainTvl",
   "group": "crypto",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "tail": 400
+  }
  },
  {
   "id": "cx:chn",
@@ -639,12 +661,31 @@
   "id": "ast:t24",
   "url": "https://fapi.asterdex.com/fapi/v1/ticker/24hr",
   "group": "aster",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "fields": [
+    "symbol",
+    "lastPrice",
+    "priceChangePercent",
+    "highPrice",
+    "lowPrice",
+    "quoteVolume",
+    "count"
+   ]
+  }
  },
  {
   "id": "ast:prem",
   "url": "https://fapi.asterdex.com/fapi/v1/premiumIndex",
   "group": "aster",
-  "kind": "json"
+  "kind": "json",
+  "pick": {
+   "fields": [
+    "symbol",
+    "lastFundingRate",
+    "nextFundingTime",
+    "markPrice"
+   ]
+  }
  }
 ]
