@@ -18,7 +18,10 @@ jobs:
         with:
           node-version: 22
       - run: node relay/audit-fetch.mjs out
-      - env:
+        timeout-minutes: 24
+        continue-on-error: true
+      - if: always()
+        env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd out && git init -q -b audit-data && git config user.name tapewire-relay && git config user.email tapewire-relay@users.noreply.github.com
