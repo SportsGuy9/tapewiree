@@ -1,0 +1,20 @@
+[
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=ETHUSDT&interval=1m&startTime=1791252212213&endTime=1791268234968&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=HYPEUSDT&interval=1m&startTime=1790891185103&endTime=1790892420000&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=ZECUSDT&interval=1m&startTime=1790889788829&endTime=1790892180000&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=ZECUSDT&interval=1m&startTime=1790894847968&endTime=1790896698699&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=QNTUSDT&interval=1m&startTime=1790887013224&endTime=1790888040000&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=ZECUSDT&interval=1m&startTime=1790893343734&endTime=1790895180000&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=BTCUSDT&interval=1m&startTime=1790887012915&endTime=1790890500000&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=HYPEUSDT&interval=1m&startTime=1790789381046&endTime=1790790780000&limit=1500",
+ "https://fapi.asterdex.com/fapi/v1/klines?symbol=ZECUSDT&interval=1m&startTime=1790583907021&endTime=1790585700000&limit=1500",
+ "https://query1.finance.yahoo.com/v8/finance/chart/USDJPY=X?period1=1790607926&period2=1790739300&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/USDCAD=X?period1=1790698066&period2=1790712954&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/EURUSD=X?period1=1790603108&period2=1790678100&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?period1=1790607925&period2=1790643511&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/NQ=F?period1=1790570771&period2=1791391500&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?period1=1790607924&period2=1790622600&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?period1=1790570771&period2=1791393600&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/CL=F?period1=1790607924&period2=1791220500&interval=5m&includePrePost=true",
+ "https://query1.finance.yahoo.com/v8/finance/chart/CCL?period1=1790696482&period2=1790717126&interval=5m&includePrePost=true"
+]

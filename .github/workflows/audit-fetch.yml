@@ -1,0 +1,25 @@
+name: Tapewire audit fetch (one-off)
+on:
+  push:
+    paths:
+      - "relay/audit-urls.json"
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: relay
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node relay/audit-fetch.mjs out
+      - env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out && git init -q -b audit-data && git config user.name tapewire-relay && git config user.email tapewire-relay@users.noreply.github.com
+          git add -A && git commit -q -m "audit data" && git push -q --force "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" audit-data:audit-data
