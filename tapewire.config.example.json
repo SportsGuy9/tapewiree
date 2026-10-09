@@ -9,7 +9,8 @@
   },
   "mcp": {
     "CoinMarketCap": { "url": "https://mcp.coinmarketcap.com/mcp", "headers": { "X-CMC-MCP-API-KEY": "your-coinmarketcap-key" }, "enabled": false },
-    "Bigdata.com": { "url": "https://mcp.bigdata.com/", "headers": { "X-API-KEY": "your-bigdata-key" }, "enabled": false }
+    "Bigdata.com": { "url": "https://mcp.bigdata.com/", "headers": { "X-API-KEY": "your-bigdata-key" }, "enabled": false },
+    "Dune": { "url": "https://api.dune.com/mcp/v1", "headers": { "X-Dune-Api-Key": "your-dune-key" }, "enabled": false }
   },
   "backupsKeep": 21
 }

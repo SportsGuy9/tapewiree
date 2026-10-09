@@ -40,7 +40,7 @@ export function loadConfig() {
       promptBudgetKB: +(env("TAPEWIRE_PROMPT_KB") || a.promptBudgetKB || 160)
     },
     keys: Object.fromEntries(KEY_SPECS.map((k) => [k.id, env(k.env) || file.keys?.[k.id] || ""])),
-    mcpUrls: { cmc: env("COINMARKETCAP_MCP_URL") || "https://mcp.coinmarketcap.com/mcp", bigdata: env("BIGDATA_MCP_URL") || "https://mcp.bigdata.com/" },
+    mcpUrls: { cmc: env("COINMARKETCAP_MCP_URL") || "https://mcp.coinmarketcap.com/mcp", bigdata: env("BIGDATA_MCP_URL") || "https://mcp.bigdata.com/", dune: env("DUNE_MCP_URL") || "https://api.dune.com/mcp/v1" },
     // optional remote MCP servers, keyed by the connector name the page uses
     mcp: file.mcp || {},
     backupsKeep: file.backupsKeep || 21

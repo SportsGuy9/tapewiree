@@ -35,12 +35,13 @@ Open **Sources & keys → API keys & connectors**, paste keys and press **Save k
 | `FIRECRAWL_API_KEY` | Only used when a site blocks a direct fetch | Paid |
 | `COINMARKETCAP_API_KEY` | Crypto tab market structure via CoinMarketCap's MCP server | Free tier |
 | `BIGDATA_API_KEY` | Premium news search, tearsheet and calendar via Bigdata.com's MCP server | Paid |
+| `DUNE_API_KEY` | On-chain queries and dashboards via Dune's MCP server | Free tier |
 
 With no Twelve Data key, a Finnhub, FMP or Polygon key covers quotes and 5-minute bars instead. Each news API is paced to its free-tier limit.
 
 **Without any keys** these still work: 50+ news feeds (Bloomberg, CNBC, FT, ForexLive, Fed, ECB, BLS, Google News desks, crypto outlets, SEC 8-Ks, Nasdaq halts, StockTwits, Reddit), news search, Yahoo futures/index/yield/commodity quotes, Kalshi Fed odds, CNN Fear & Greed, FRED credit and liquidity, the earnings calendar, Treasury auctions, the economic calendar, Crypto.com prices and candles, the whole-market stock screen, the FX desk and SEC EDGAR data. These are all fetched directly and cost nothing.
 
-CoinMarketCap and Bigdata.com are reached through their remote MCP servers once their key is set. The default addresses are `https://mcp.coinmarketcap.com/mcp` (header `X-CMC-MCP-API-KEY`) and `https://mcp.bigdata.com/` (header `X-API-KEY`). I couldn't verify them from here, so if Test fails, check the provider's MCP docs and set `COINMARKETCAP_MCP_URL` / `BIGDATA_MCP_URL`, or add a full `mcp` block in `tapewire.config.json`.
+CoinMarketCap, Bigdata.com and Dune are reached through their remote MCP servers once their key is set. The default addresses are `https://mcp.coinmarketcap.com/mcp` (header `X-CMC-MCP-API-KEY`) and `https://mcp.bigdata.com/` (header `X-API-KEY`); Dune's is `https://api.dune.com/mcp/v1` (header `X-Dune-Api-Key`). I couldn't verify them from here, so if Test fails, check the provider's MCP docs and set `COINMARKETCAP_MCP_URL` / `BIGDATA_MCP_URL` / `DUNE_MCP_URL`, or add a full `mcp` block in `tapewire.config.json`.
 
 ### AI model and cost
 

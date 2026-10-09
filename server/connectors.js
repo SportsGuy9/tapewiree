@@ -229,13 +229,14 @@ export function makeConnectors(cfg) {
     "News APIs": newsConnector(cfg)
   };
   const mcpSpecs = { ...cfg.mcp };
-  // a CoinMarketCap / Bigdata.com key in .env switches on their MCP servers without editing the config file
+  // a CoinMarketCap / Bigdata.com / Dune key in .env switches on their MCP servers without editing the config file
   if (cfg.keys.cmc && !mcpSpecs.CoinMarketCap?.url) mcpSpecs.CoinMarketCap = { url: cfg.mcpUrls.cmc, headers: { "X-CMC-MCP-API-KEY": cfg.keys.cmc } };
   if (cfg.keys.bigdata && !mcpSpecs["Bigdata.com"]?.url) mcpSpecs["Bigdata.com"] = { url: cfg.mcpUrls.bigdata, headers: { "X-API-KEY": cfg.keys.bigdata } };
+  if (cfg.keys.dune && !mcpSpecs.Dune?.url) mcpSpecs.Dune = { url: cfg.mcpUrls.dune, headers: { "X-Dune-Api-Key": cfg.keys.dune } };
   const remote = new Map(Object.entries(mcpSpecs).filter(([, s]) => s && s.url && s.enabled !== false).map(([k, s]) => [k, new RemoteMcp(k, s)]));
   const status = () => {
     const out = {};
-    for (const n of new Set([...Object.keys(builtin), ...remote.keys(), "CoinMarketCap", "Bigdata.com"])) {
+    for (const n of new Set([...Object.keys(builtin), ...remote.keys(), "CoinMarketCap", "Bigdata.com", "Dune"])) {
       out[n] = remote.has(n) ? "remote MCP" : n === "News APIs" ? (configuredNews(cfg.keys).length ? `${configuredNews(cfg.keys).length} provider${configuredNews(cfg.keys).length > 1 ? "s" : ""}` : "needs keys") : n === "Twelve Data" ? (cfg.keys.twelvedata ? "API key" : priceFallback.available(cfg.keys) ? "fallback (Finnhub/FMP/Polygon)" : "needs key") : n === "Alpha Vantage MCP Server" ? (cfg.keys.alphavantage ? "API key" : "needs key") : n === "Tavily" ? (cfg.keys.tavily ? "API key" : "needs key") : builtin[n] ? (n === "Firecrawl" && cfg.keys.firecrawl ? "direct + API key" : "direct (free)") : "not configured";
     }
     return out;
@@ -261,7 +262,7 @@ export function makeConnectors(cfg) {
     if (id === "alphavantage") { const j = await builtin["Alpha Vantage MCP Server"].GLOBAL_QUOTE({ symbol: "IBM" }); const ok = !!j?.["Global Quote"]?.["05. price"]; return { ok, message: ok ? `IBM ${j["Global Quote"]["05. price"]}` : JSON.stringify(j).slice(0, 200) }; }
     if (id === "tavily") { const j = await builtin.Tavily.tavily_search({ query: "stock market", topic: "news", max_results: 1 }); return { ok: true, message: `${(j.results || []).length} result(s).` }; }
     if (id === "firecrawl") { if (!k.firecrawl) return { ok: false, message: "No key saved." }; const r = await fetch("https://api.firecrawl.dev/v2/search", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${k.firecrawl}` }, body: JSON.stringify({ query: "nasdaq", limit: 1 }) }); return { ok: r.ok, message: r.ok ? "Key works." : `HTTP ${r.status}` }; }
-    if (id === "cmc" || id === "bigdata") { const name = id === "cmc" ? "CoinMarketCap" : "Bigdata.com"; const rm = remote.get(name); if (!rm) return { ok: false, message: "No key saved." }; await rm.ensure(); const t = await rm.rpc("tools/list", {}); return { ok: true, message: `Connected: ${(t?.tools || []).length} tools.` }; }
+    if (id === "cmc" || id === "bigdata" || id === "dune") { const name = { cmc: "CoinMarketCap", bigdata: "Bigdata.com", dune: "Dune" }[id]; const rm = remote.get(name); if (!rm) return { ok: false, message: "No key saved." }; await rm.ensure(); const t = await rm.rpc("tools/list", {}); return { ok: true, message: `Connected: ${(t?.tools || []).length} tools.` }; }
     return { ok: false, message: "No test for this key." };
   }
   return { call, status, test, news: () => configuredNews(cfg.keys).map((id) => ({ id, label: NEWS_PROVIDERS[id].label })) };

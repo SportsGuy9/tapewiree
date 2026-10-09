@@ -21,7 +21,8 @@ export const KEY_SPECS = [
   { id: "tavily", env: "TAVILY_API_KEY", label: "Tavily", group: "Search", url: "https://app.tavily.com", what: "Extra AI news search.", cost: "free tier (1,000/month)" },
   { id: "firecrawl", env: "FIRECRAWL_API_KEY", label: "Firecrawl", group: "Search", url: "https://www.firecrawl.dev/app/api-keys", what: "Only used when a website blocks a direct fetch; better web news search.", cost: "free trial, then paid" },
   { id: "cmc", env: "COINMARKETCAP_API_KEY", label: "CoinMarketCap (MCP)", group: "Crypto", url: "https://coinmarketcap.com/api/", what: "Crypto market structure, technicals, narratives and catalysts on the Crypto tab, through CoinMarketCap's MCP server. Set COINMARKETCAP_MCP_URL in .env if their address differs.", cost: "free tier" },
-  { id: "bigdata", env: "BIGDATA_API_KEY", label: "Bigdata.com (MCP)", group: "News", url: "https://bigdata.com", what: "Premium news search, market tearsheet and economic calendar through Bigdata.com's MCP server. Set BIGDATA_MCP_URL in .env if their address differs.", cost: "paid credits" }
+  { id: "bigdata", env: "BIGDATA_API_KEY", label: "Bigdata.com (MCP)", group: "News", url: "https://bigdata.com", what: "Premium news search, market tearsheet and economic calendar through Bigdata.com's MCP server. Set BIGDATA_MCP_URL in .env if their address differs.", cost: "paid credits" },
+  { id: "dune", env: "DUNE_API_KEY", label: "Dune (MCP)", group: "Crypto", url: "https://dune.com/settings/api", what: "On-chain queries and dashboards through Dune's MCP server. Set DUNE_MCP_URL in .env if their address differs.", cost: "free tier, then paid credits" }
 ];
 
 export const ENV_FILE = path.join(ROOT, ".env");
