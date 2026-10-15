@@ -13,7 +13,7 @@ export function Verdict({ results, onJump }: { results: Results; onJump: (f: Fin
   const top = results.findings.filter((f) => f.severity === "high" || f.severity === "review").slice(0, 6);
   const more = results.findings.filter((f) => f.severity === "high" || f.severity === "review").length - top.length;
   return (
-    <section aria-label="Verdict" className={`rounded-md border-l-4 ${BAR[v.level]} border border-line p-3 sm:p-4`}>
+    <section id="verdict" aria-label="Verdict" className={`rounded-md border-l-4 ${BAR[v.level]} border border-line p-3 sm:p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-xs font-medium uppercase tracking-wide text-muted">QA verdict</div>

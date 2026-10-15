@@ -89,3 +89,16 @@ body {
     @apply border-b border-line px-2 py-1.5 align-top text-sm;
   }
 }
+
+/* guided tour highlight */
+.tour-hl {
+  outline: 3px solid rgb(var(--accent));
+  outline-offset: 4px;
+  border-radius: 6px;
+  scroll-margin-bottom: 200px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tour-hl {
+    transition: outline-color 0.2s;
+  }
+}

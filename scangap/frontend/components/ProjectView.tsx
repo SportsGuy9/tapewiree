@@ -7,6 +7,7 @@ import { STATIC_DEMO, SYNTH_AFTER_ID, SYNTH_ID, client } from "@/lib/api";
 import type { Bundle, Finding, GridPayload, Health } from "@/lib/types";
 import { Empty } from "./Chip";
 import { CostCard } from "./CostCard";
+import { Tour, type TourStep } from "./Tour";
 import Heatmap from "./Heatmap";
 import {
   DeliveryPanel,
@@ -106,6 +107,13 @@ export default function ProjectView({ id }: { id: string }) {
   const [after, setAfter] = useState(false);
   const [beforeCounts, setBeforeCounts] = useState<Bundle["results"]["verdict"] | null>(null);
   const activeId = canRescan && after ? SYNTH_AFTER_ID : id;
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const tourSteps: TourStep[] = [
+    { target: "verdict", caption: "The verdict comes first: this job is not ready to demobilize, and here is why.", onEnter: () => { setAfter(false); setSelZone(null); } },
+    { target: "heatmap-card", caption: "Mech 104 (bottom right, red) has no returns at all: a possible gap to check before leaving site.", onEnter: () => { setAfter(false); setSelZone("Z104"); } },
+    { target: "heatmap-card", caption: "The red ✕ marks show planned setups S7 and S9 that were never shot. They were meant to cover Mech 104 and the east corridor.", onEnter: () => { setAfter(false); setSelZone(null); } },
+    { target: "rescan-toggle", caption: "Tap “Simulate re-scan” to see what shooting S7 + S9 fixes, and what it doesn't (simulated data).", onEnter: () => setSelZone(null) },
+  ];
 
   useEffect(() => {
     client
@@ -174,8 +182,13 @@ export default function ProjectView({ id }: { id: string }) {
             {results.cloud && <> · <span className="num">{results.cloud.file}</span></>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {busy && <span className="text-sm text-muted">Working…</span>}
+          {canRescan && (
+            <button className="btn-primary min-h-[44px]" onClick={() => setTourStep(0)}>
+              ▶ Take the 60-second tour
+            </button>
+          )}
           {!editable && <span className="rounded border border-line px-2 py-0.5 text-xs text-muted">READ-ONLY</span>}
           {editable && <button className="btn" disabled={busy} onClick={() => run(client.analyze(project.id))}>↻ Re-run checks</button>}
           <a className="btn" href={client.reportUrl(project.id, "pdf")} target="_blank" rel="noreferrer">⇩ PDF</a>
@@ -201,7 +214,7 @@ export default function ProjectView({ id }: { id: string }) {
         />
       )}
 
-      <section className="card p-3 sm:p-4" aria-label="Coverage heatmap">
+      <section id="heatmap-card" className="card p-3 sm:p-4" aria-label="Coverage heatmap">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Coverage — top-down density, 0.5–2.0 m above floor</h2>
           {(results.grids?.length ?? 0) > 1 && (
@@ -260,7 +273,9 @@ export default function ProjectView({ id }: { id: string }) {
         </div>
       </section>
 
-      <footer className="pb-6 text-xs text-muted">
+      {tourStep != null && <Tour steps={tourSteps} step={tourStep} setStep={setTourStep} onClose={() => setTourStep(null)} />}
+
+      <footer className={`text-xs text-muted ${tourStep != null ? "pb-48" : "pb-6"}`}>
         <p>ScanGap is a QA aid, not a certification. Candidate gaps are “possible gap — review”: a closed door, furniture or out-of-scope area can look the same. LOA compliance requires independent validation data.</p>
         {project.credit && <p className="mt-1">{project.credit.split(/(https:\/\/\S+)/).map((s, i) => (s.startsWith("https://") ? <a key={i} className="underline" href={s.replace(/[.,]$/, "")} target="_blank" rel="noreferrer">{s}</a> : s))}</p>}
       </footer>
