@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { STATIC_DEMO, SYNTH_AFTER_ID, SYNTH_ID, client } from "@/lib/api";
 import type { Bundle, Finding, GridPayload, Health } from "@/lib/types";
 import { Empty } from "./Chip";
+import { CostCard } from "./CostCard";
 import Heatmap from "./Heatmap";
 import {
   DeliveryPanel,
@@ -183,6 +184,8 @@ export default function ProjectView({ id }: { id: string }) {
       {error && <div className="rounded border border-sev-high/40 bg-sev-high/10 p-2 text-sm text-sev-high">{error}</div>}
 
       <Verdict results={results} onJump={jump} />
+
+      <CostCard />
 
       {canRescan && (
         <RescanToggle
