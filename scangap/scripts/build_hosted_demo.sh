@@ -10,6 +10,7 @@ export SCANGAP_OFFLINE=1
 python -m scangap.cli demo synthetic
 rm -rf "$OUT" && mkdir -p "$OUT"
 python -m scangap.cli export-static demo-synthetic "$OUT/demo"
+python -m scangap.cli export-static demo-synthetic-after "$OUT/demo/after"
 (cd "$ROOT/frontend" && rm -rf out-demo-build && NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_STATIC_DEMO=1 npx next build >/dev/null)
 mkdir -p "$OUT/app" && cp -r "$ROOT/frontend/out-demo-build/_next" "$OUT/app/_next" && rm -f "$OUT"/app/_next/static/chunks/polyfills-*.js
 # full document (for any static host: GitHub Pages, S3, Netlify...)

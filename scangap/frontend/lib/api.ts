@@ -4,6 +4,11 @@ import type { Bundle, GridPayload, Health, Requirement, Settings, Spec, Zone } f
 export const STATIC_DEMO = process.env.NEXT_PUBLIC_STATIC_DEMO === "1";
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 export const DEMO_DIR = "demo";
+/** Synthetic demo project and its simulated "after re-scan" twin. */
+export const SYNTH_ID = "demo-synthetic";
+export const SYNTH_AFTER_ID = "demo-synthetic-after";
+/** Static demo: the "after" bundle is baked under demo/after/. */
+const sdir = (id: string) => (id === SYNTH_AFTER_ID ? `${DEMO_DIR}/after` : DEMO_DIR);
 
 async function j<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -29,7 +34,7 @@ export const client = {
   createProject: (name: string) => send("POST", "/projects", { name }),
   deleteProject: (id: string) => api(`/projects/${id}`, { method: "DELETE" }),
   project: (id: string): Promise<Bundle> =>
-    STATIC_DEMO ? fetch(`${DEMO_DIR}/project.json`).then((r) => j<Bundle>(r)) : api(`/projects/${id}`),
+    STATIC_DEMO ? fetch(`${sdir(id)}/project.json`).then((r) => j<Bundle>(r)) : api(`/projects/${id}`),
   analyze: (id: string): Promise<Bundle> => send("POST", `/projects/${id}/analyze`, {}),
   putSpec: (id: string, spec: Spec): Promise<Bundle> => send("PUT", `/projects/${id}/spec`, spec),
   putSettings: (id: string, s: Settings): Promise<Bundle> => send("PUT", `/projects/${id}/settings`, s),
@@ -57,14 +62,14 @@ export const client = {
   },
   grid: async (id: string, floor: number): Promise<GridPayload> => {
     if (STATIC_DEMO) {
-      const all = await fetch(`${DEMO_DIR}/grids.json`).then((r) => j<GridPayload[]>(r));
+      const all = await fetch(`${sdir(id)}/grids.json`).then((r) => j<GridPayload[]>(r));
       return all[floor];
     }
     return api(`/projects/${id}/grid/${floor}`);
   },
   points: async (id: string): Promise<Float32Array> => {
     if (STATIC_DEMO) {
-      const { b64 } = await fetch(`${DEMO_DIR}/points.json`).then((r) => j<{ b64: string }>(r));
+      const { b64 } = await fetch(`${sdir(id)}/points.json`).then((r) => j<{ b64: string }>(r));
       return decodeDensity(b64);
     }
     const buf = await fetch(`${BASE}/api/projects/${id}/points.bin?n=150000`).then((r) => r.arrayBuffer());
@@ -72,7 +77,7 @@ export const client = {
   },
   buildDemo: (which: "synthetic" | "edinburgh") => send("POST", `/demo/${which}`, {}),
   reportUrl: (id: string, kind: "pdf" | "csv") =>
-    STATIC_DEMO ? `${DEMO_DIR}/report.${kind}` : `${BASE}/api/projects/${id}/report.${kind}`,
+    STATIC_DEMO ? `${sdir(id)}/report.${kind}` : `${BASE}/api/projects/${id}/report.${kind}`,
 };
 
 /** base64 → Float32Array (density grids, point samples) */

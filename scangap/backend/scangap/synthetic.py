@@ -155,13 +155,23 @@ def simulate_scan(origin, boxes, step_deg=0.4, rng=None, max_range=40.0, noise_m
     return local, intensity
 
 
-def actual_setups() -> list[tuple[str, float, float]]:
+RESCAN = ("S7", "S9")  # the "fix it in the field" scenario: the two missed setups are shot
+RESCAN_OFFSETS = {"S7": (0.15, -0.1), "S9": (-0.2, 0.05)}
+
+
+def actual_setups(rescanned: tuple[str, ...] = ()) -> list[tuple[str, float, float]]:
+    """Setups that were shot. Re-scanned setups are appended last, so the original scans
+    simulate identically (same RNG sequence) in the before and after clouds."""
     out = []
     for lab, x, y, _ in PLANNED:
         if lab in MISSED:
             continue
         dx, dy = ACTUAL_OFFSETS.get(lab, (0, 0))
         out.append((lab, x + dx, y + dy))
+    for lab, x, y, _ in PLANNED:
+        if lab in rescanned:
+            dx, dy = RESCAN_OFFSETS.get(lab, (0, 0))
+            out.append((lab, x + dx, y + dy))
     return out
 
 
@@ -258,23 +268,24 @@ def write_demo_inputs(out: Path) -> dict:
     return {"planned": len(PLANNED), "missed": sorted(MISSED)}
 
 
-def generate(out: Path, step_deg: float = 0.4, seed: int = 7, fmt: str = "e57") -> Path:
-    """Simulate all actual setups and write the point cloud (E57 with poses, or LAZ)."""
+def generate(out: Path, step_deg: float = 0.4, seed: int = 7, fmt: str = "e57",
+             rescanned: tuple[str, ...] = ()) -> Path:
+    """Simulate all actual setups (plus any re-scanned ones) and write the point cloud (E57 with poses, or LAZ)."""
     out.mkdir(parents=True, exist_ok=True)
     boxes = build_geometry()
     rng = np.random.default_rng(seed)
     scans = []
-    for lab, x, y in actual_setups():
+    for lab, x, y in actual_setups(rescanned):
         local, inten = simulate_scan((x, y, SCANNER_H), boxes, step_deg=step_deg, rng=rng)
         scans.append({"name": lab, "xyz": local, "intensity": inten, "translation": [x, y, SCANNER_H]})
     if fmt == "e57":
         from .readers.e57 import write_e57
-        path = out / "synthetic_office_L1.e57"
+        path = out / ("synthetic_office_L1_rescan.e57" if rescanned else "synthetic_office_L1.e57")
         write_e57(path, scans, coordinate_metadata="LOCAL: Harbor St Site Grid (CP-1 origin), metres",
                   sensor={"sensorVendor": "ScanGap Sim", "sensorModel": "Synthetic TLS 0.4deg",
                           "sensorSerialNumber": "SIM-0001"})
     else:
         from .readers.las import write_las
-        path = out / "synthetic_office_L1.laz"
+        path = out / ("synthetic_office_L1_rescan.laz" if rescanned else "synthetic_office_L1.laz")
         write_las(path, np.vstack([s["xyz"] + np.asarray(s["translation"]) for s in scans]))
     return path

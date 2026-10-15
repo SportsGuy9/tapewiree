@@ -107,6 +107,6 @@ function Projects() {
 
 export default function Home() {
   // The hosted read-only demo opens straight into the synthetic project.
-  if (STATIC_DEMO) return <ProjectView id="demo" />;
+  if (STATIC_DEMO) return <ProjectView id="demo-synthetic" />;
   return <Projects />;
 }

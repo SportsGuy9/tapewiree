@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { STATIC_DEMO, client } from "@/lib/api";
+import { STATIC_DEMO, SYNTH_AFTER_ID, SYNTH_ID, client } from "@/lib/api";
 import type { Bundle, Finding, GridPayload, Health } from "@/lib/types";
 import { Empty } from "./Chip";
 import Heatmap from "./Heatmap";
@@ -36,6 +36,56 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
+function RescanToggle({
+  after,
+  onChange,
+  before,
+  now,
+}: {
+  after: boolean;
+  busy: boolean;
+  onChange: (v: boolean) => void;
+  before: Bundle["results"]["verdict"] | null;
+  now: Bundle["results"]["verdict"];
+}) {
+  return (
+    <section id="rescan-toggle" aria-label="Simulate a re-scan" className={`rounded-md border p-3 ${after ? "border-accent bg-accent/5" : "border-line bg-panel"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex w-full overflow-hidden rounded border border-line sm:w-auto" role="group" aria-label="Scan state">
+          <button
+            onClick={() => onChange(false)}
+            aria-pressed={!after}
+            className={`min-h-[44px] flex-1 px-4 text-sm font-medium sm:flex-none ${!after ? "bg-ink text-panel" : "bg-panel text-ink hover:bg-surface"}`}
+          >
+            As scanned
+          </button>
+          <button
+            onClick={() => onChange(true)}
+            aria-pressed={after}
+            className={`min-h-[44px] flex-1 px-4 text-sm font-medium sm:flex-none ${after ? "bg-accent text-white" : "bg-panel text-ink hover:bg-surface"}`}
+          >
+            Simulate re-scan: add S7 + S9
+          </button>
+        </div>
+        {after && before && (
+          <span className="num text-sm">
+            HIGH {before.counts.high} → <strong>{now.counts.high}</strong> · REVIEW {before.counts.review} → <strong>{now.counts.review}</strong>
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {after ? (
+          <>
+            <strong className="text-accent">SIMULATED.</strong> The point cloud was re-generated with the two missed setups (S7 in Mech 104, S9 in the east corridor) added. This is not field data. The registration report, scope and delivery package are unchanged, so their findings remain.
+          </>
+        ) : (
+          "What changes if the crew shoots the two missed setups before leaving site?"
+        )}
+      </p>
+    </section>
+  );
+}
+
 const MODULE_TAB: Record<string, Tab> = {
   spec: "spec", scan: "scan", coverage: "zones", plan: "plan", registration: "registration",
   validation: "registration", scope: "scope", manifest: "delivery",
@@ -50,11 +100,28 @@ export default function ProjectView({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selZone, setSelZone] = useState<string | null>(null);
+  // "Fix it in the field": the synthetic demo has a baked twin where S7 + S9 were shot (simulated).
+  const canRescan = id === SYNTH_ID;
+  const [after, setAfter] = useState(false);
+  const [beforeCounts, setBeforeCounts] = useState<Bundle["results"]["verdict"] | null>(null);
+  const activeId = canRescan && after ? SYNTH_AFTER_ID : id;
 
   useEffect(() => {
-    client.project(id).then(setBundle).catch((e) => setError(String(e.message ?? e)));
+    client
+      .project(activeId)
+      .then((b) => {
+        setBundle(b);
+        if (activeId === id) setBeforeCounts(b.results.verdict);
+      })
+      .catch((e) => {
+        setError(String(e.message ?? e));
+        if (activeId !== id) setAfter(false);
+      });
+  }, [activeId, id]);
+
+  useEffect(() => {
     client.health().then(setHealth).catch(() => setHealth(null));
-  }, [id]);
+  }, []);
 
   const gridKey = bundle ? JSON.stringify(bundle.results.grids ?? null) + bundle.results.cloud?.path : "";
   useEffect(() => {
@@ -62,9 +129,9 @@ export default function ProjectView({ id }: { id: string }) {
       setGrid(null);
       return;
     }
-    client.grid(id, Math.min(floor, bundle.results.grids.length - 1)).then(setGrid).catch((e) => setError(String(e.message ?? e)));
+    client.grid(activeId, Math.min(floor, bundle.results.grids.length - 1)).then(setGrid).catch((e) => setError(String(e.message ?? e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, floor, gridKey]);
+  }, [activeId, floor, gridKey]);
 
   const editable = !STATIC_DEMO && !(health?.readonly ?? false) && !(bundle?.project.readonly ?? false);
 
@@ -116,6 +183,20 @@ export default function ProjectView({ id }: { id: string }) {
       {error && <div className="rounded border border-sev-high/40 bg-sev-high/10 p-2 text-sm text-sev-high">{error}</div>}
 
       <Verdict results={results} onJump={jump} />
+
+      {canRescan && (
+        <RescanToggle
+          after={after}
+          busy={busy}
+          onChange={(v) => {
+            setError(null);
+            setSelZone(null);
+            setAfter(v);
+          }}
+          before={beforeCounts}
+          now={results.verdict}
+        />
+      )}
 
       <section className="card p-3 sm:p-4" aria-label="Coverage heatmap">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
