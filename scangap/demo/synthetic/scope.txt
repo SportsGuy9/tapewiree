@@ -1,0 +1,33 @@
+SCOPE OF WORK — REALITY CAPTURE
+Project: Harbor Street Office Renovation, Level 1
+Client: Northwind Properties LLC
+Date: 2026-09-02
+
+1. Purpose
+The point cloud and model will be used for renovation design of the Level 1 office suite, including
+architectural layout and MEP coordination in the mechanical room.
+
+2. Area
+Laser scan all of Level 1: Offices 101, 102 and 105, Conference 103, Open Office 106, Mechanical Room 104,
+and the full length of the central corridor (east and west).
+
+3. Accuracy
+Registered point cloud shall meet USIBD LOA30 (5–15 mm at 95% confidence) for all occupied rooms and the
+corridor. Mechanical Room 104 may be delivered at LOA20.
+
+4. Model
+Provide a Revit model of architecture and major MEP at LOD 300.
+
+5. Coordinate system and units
+Deliver in the client's local site grid (Harbor St Site Grid, origin at control point CP-1), units in metres.
+
+6. Deliverables
+a) Registered point cloud in E57 format, one file per level.
+b) Registered point cloud in RCP/RCS format.
+c) Revit model (RVT), LOD 300.
+d) Registration report (PDF).
+e) Scan location plan (PDF).
+File names shall follow the convention HSO_L1_<description>.<ext>.
+
+7. Schedule
+Field work to be completed by 2026-10-10. Deliverables due 15 working days after demobilization.

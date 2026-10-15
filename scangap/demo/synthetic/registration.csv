@@ -1,0 +1,11 @@
+from,to,error_mm,overlap_pct,type
+S4,S6,1.9,41,cloud-to-cloud
+S1,S6,2.4,38,cloud-to-cloud
+S6,S8,2.2,62,cloud-to-cloud
+S8,S10,3.1,58,cloud-to-cloud
+S10,S11,7.4,33,cloud-to-cloud
+S11,S5,2.6,35,cloud-to-cloud
+S11,S2,2.9,31,cloud-to-cloud
+S2,S3,3.3,27,cloud-to-cloud
+T1,,2.1,,target
+T2,,3.8,,target
