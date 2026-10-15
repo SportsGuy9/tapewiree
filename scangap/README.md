@@ -145,6 +145,12 @@ Walk through it in the UI:
 7. **3D**: downsampled cloud, coloured by height.
 8. **Report**: add reviewer and date, then download the one-page PDF and the CSV.
 
+**Conference extras on the synthetic project:**
+- **"Simulate re-scan: add S7 + S9"** switches to a baked twin project (`demo-synthetic-after`) whose cloud was re-simulated with the two missed setups. It is labelled SIMULATED. Mech 104 and Corridor East pass and S7/S9 are found; the corridor link, validation method and delivery findings remain.
+- **Return-trip cost card**: crew size × day rate × (days on site + travel hours ÷ 8). Blank by default; computed in the browser only.
+- **"Take the 60-second tour"**: four steps (verdict → Mech 104 → S7/S9 → re-scan toggle) in a one-handed bottom sheet.
+- **QR code** for the hosted demo: `demo/scangap-demo-qr.png` (regenerate with `python scripts/make_qr.py <url>`).
+
 ### 2. Real file: Edinburgh "Synthetic building"
 
 Valero, Enrique (2021). *Synthetic building* [dataset]. Cyberbuild Lab, The University of
@@ -196,7 +202,7 @@ defined up front.
 cd scangap/backend && python -m pytest -q
 ```
 
-35 tests. The known-answer suite builds the synthetic project and asserts that:
+40 tests. The known-answer suite builds the synthetic project and asserts that:
 
 - Mech 104 is flagged
 - Corridor East is flagged as thin
@@ -205,6 +211,7 @@ cd scangap/backend && python -m pytest -q
 - the missing validation method is flagged REVIEW
 - the manifest findings appear
 - the one-page PDF is produced
+- in the simulated re-scan, Mech 104 is covered, S7/S9 are found and the corridor link is still flagged
 
 Unit tests cover:
 
